@@ -33,7 +33,7 @@ class JarvisBrain:
         self.host = host or OLLAMA_HOST
         self.system_prompt = JARVIS_SYSTEM_PROMPT
         self.conversation_history: list[dict] = []
-        self.max_history = 20  # Máximo de mensajes en el historial activo
+        self.max_history = 10  # Máximo de mensajes en el historial activo
         self._available = None
         self._warmed_up = False
         logger.info(f"JarvisBrain inicializado con modelo: {self.model}")
@@ -191,24 +191,35 @@ class JarvisBrain:
         messages = self._build_messages(full_message)
 
         try:
+            # Usar streaming interno para evitar timeout por bloqueo total
+            # El servidor empieza a devolver tokens de inmediato
             resp = requests.post(
                 f"{self.host}/api/chat",
                 json={
                     "model": self.model,
                     "messages": messages,
-                    "stream": False,
+                    "stream": True,
                     "options": {
                         "temperature": 0.7,
                         "top_p": 0.9,
-                        "num_predict": 256,
+                        "num_predict": 200,
+                        "num_ctx": 2048,
                     },
                 },
-                timeout=90,
+                timeout=60,
+                stream=True,
             )
 
             if resp.status_code == 200:
-                data = resp.json()
-                assistant_message = data.get("message", {}).get("content", "")
+                assistant_message = ""
+                for line in resp.iter_lines():
+                    if line:
+                        data = json.loads(line)
+                        token = data.get("message", {}).get("content", "")
+                        if token:
+                            assistant_message += token
+                        if data.get("done", False):
+                            break
 
                 # Guardar en historial
                 self.conversation_history.append(

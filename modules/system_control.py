@@ -11,6 +11,7 @@ import time
 import datetime
 from pathlib import Path
 from typing import Optional
+import tempfile
 
 logger = logging.getLogger("jarvis.system_control")
 
@@ -21,6 +22,8 @@ class SystemControl:
     def __init__(self):
         # Nombres legibles para la búsqueda de Windows
         # Clave = lo que dice el usuario, Valor = lo que se escribe en Windows Search
+        self._brain = None  # Referencia opcional al LLM para features avanzados
+
         self._app_search_names = {
             "chrome": "Google Chrome",
             "google": "Google Chrome",
@@ -484,22 +487,27 @@ class SystemControl:
     def click_on_text(self, text: str, wait: float = 2.0) -> str:
         """
         Busca texto visible en pantalla y hace clic en él.
-        Usa OCR con pyautogui.locateOnScreen o busca por imagen.
-        Fallback: usa la accesibilidad de Windows (UI Automation).
+        Estrategia escalonada:
+        1. UI Automation (rápido, funciona con apps nativas)
+        2. OCR con Windows Media OCR (funciona con todo, incluyendo Chrome/Discord)
+        3. Fallback: Ctrl+F
         """
         import pyautogui
         try:
             # Esperar a que la UI se estabilice
             time.sleep(wait)
 
-            # Intentar con pyautogui.locateOnScreen no es viable para texto
-            # Usamos UI Automation via PowerShell para encontrar elementos
+            # 1. Intentar con UI Automation (rápido)
             result = self._find_and_click_ui_element(text)
             if result:
                 return result
 
-            # Fallback: tomar screenshot, buscar con OCR-like approach
-            # Intentar buscar texto directamente con accesibilidad
+            # 2. Intentar con OCR de pantalla (funciona con Chrome, Discord, etc.)
+            result = self._find_and_click_via_ocr(text)
+            if result:
+                return result
+
+            # 3. Fallback: buscar con Ctrl+F
             result = self._click_via_accessibility(text)
             if result:
                 return result
@@ -610,6 +618,753 @@ class SystemControl:
             logger.warning(f"Error en búsqueda de accesibilidad: {e}")
         return None
 
+    def _find_and_click_via_ocr(self, text: str) -> Optional[str]:
+        """
+        Busca texto en pantalla usando OCR de Windows (Windows.Media.Ocr).
+        No requiere dependencias externas — usa el OCR nativo de Windows 10/11.
+        Captura un screenshot, lo procesa con OCR y busca la coincidencia más cercana.
+        """
+        import pyautogui
+        try:
+            # 1. Capturar pantalla y guardar en archivo temporal
+            temp_path = os.path.join(
+                tempfile.gettempdir(), "jarvis_ocr_screen.png"
+            )
+            screenshot = pyautogui.screenshot()
+            screenshot.save(temp_path)
+
+            # 2. Usar Windows OCR via PowerShell (nativo Win10+)
+            search_text_escaped = text.replace("'", "''").replace('"', '`"')
+            ps_script = f'''
+            Add-Type -AssemblyName System.Runtime.WindowsRuntime
+
+            # Helper para await de tareas async en PowerShell
+            $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {{
+                $_.Name -eq 'AsTask' -and
+                $_.GetParameters().Count -eq 1 -and
+                $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
+            }})[0]
+            Function Await($WinRtTask, $ResultType) {{
+                $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
+                $netTask = $asTask.Invoke($null, @($WinRtTask))
+                $netTask.Wait(-1) | Out-Null
+                $netTask.Result
+            }}
+
+            # Cargar ensamblados de OCR
+            [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
+            [Windows.Graphics.Imaging.SoftwareBitmap, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
+            [Windows.Graphics.Imaging.BitmapDecoder, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
+            [Windows.Storage.Streams.RandomAccessStream, Windows.Storage.Streams, ContentType=WindowsRuntime] | Out-Null
+
+            # Abrir imagen
+            $file = [System.IO.File]::OpenRead("{temp_path.replace(chr(92), '/')}")
+            $stream = [Windows.Storage.Streams.RandomAccessStream]::FromStream($file)
+            $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
+            $bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
+
+            # Crear motor OCR en español
+            $lang = New-Object Windows.Globalization.Language("es-ES")
+            $ocr = $null
+            if ([Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($lang)) {{
+                $ocr = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($lang)
+            }}
+            if ($null -eq $ocr) {{
+                $ocr = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
+            }}
+
+            # Ejecutar OCR
+            $result = Await ($ocr.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])
+
+            # Buscar el texto objetivo (búsqueda flexible)
+            $searchText = "{search_text_escaped}".ToLower()
+            $bestMatch = $null
+            $bestDist = 9999
+            $allWords = @()
+
+            foreach ($line in $result.Lines) {{
+                $lineText = $line.Text.ToLower()
+                
+                # Verificar si la línea completa contiene el texto
+                if ($lineText -like "*$searchText*") {{
+                    foreach ($word in $line.Words) {{
+                        $rect = $word.BoundingRect
+                        $allWords += @{{
+                            Text = $word.Text
+                            X = [int]($rect.X + $rect.Width / 2)
+                            Y = [int]($rect.Y + $rect.Height / 2)
+                        }}
+                    }}
+                    if ($allWords.Count -gt 0) {{
+                        # Calcular centro del grupo de palabras que coinciden
+                        $avgX = [int](($allWords | Measure-Object -Property X -Average).Average)
+                        $avgY = [int](($allWords | Measure-Object -Property Y -Average).Average)
+                        Write-Output "FOUND:$avgX,$avgY"
+                        $file.Close()
+                        exit
+                    }}
+                }}
+                
+                # También buscar palabras individuales similares
+                foreach ($word in $line.Words) {{
+                    $wordText = $word.Text.ToLower()
+                    # Comparación por similitud (contiene / empieza con)
+                    if ($wordText -eq $searchText -or
+                        $wordText -like "$searchText*" -or
+                        $searchText -like "$wordText*" -or
+                        $wordText -like "*$searchText*") {{
+                        $rect = $word.BoundingRect
+                        $x = [int]($rect.X + $rect.Width / 2)
+                        $y = [int]($rect.Y + $rect.Height / 2)
+                        # Preferir coincidencias exactas
+                        $dist = [Math]::Abs($wordText.Length - $searchText.Length)
+                        if ($dist -lt $bestDist) {{
+                            $bestDist = $dist
+                            $bestMatch = "$x,$y"
+                        }}
+                    }}
+                }}
+            }}
+
+            if ($bestMatch) {{
+                Write-Output "FOUND:$bestMatch"
+            }} else {{
+                Write-Output "NOT_FOUND"
+            }}
+            $file.Close()
+            '''
+
+            result = subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                capture_output=True, text=True, timeout=15
+            )
+
+            output = result.stdout.strip()
+            logger.debug(f"OCR output: {output}")
+
+            if output and output.startswith("FOUND:"):
+                coords_str = output.split("FOUND:")[-1].strip()
+                if ',' in coords_str:
+                    x, y = map(int, coords_str.split(','))
+                    pyautogui.click(x, y)
+                    logger.info(f"OCR: Clic en '{text}' en ({x}, {y})")
+                    return f"Clic realizado en '{text}'"
+
+            # Si no lo encontró exacto, intentar búsqueda difusa
+            if output == "NOT_FOUND":
+                logger.info(f"OCR: Texto '{text}' no encontrado en pantalla")
+
+        except subprocess.TimeoutExpired:
+            logger.warning("Timeout en OCR de pantalla")
+        except Exception as e:
+            logger.warning(f"Error en OCR de pantalla: {e}")
+
+        # Limpiar archivo temporal
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except Exception:
+            pass
+
+        return None
+
+    def _ocr_screen_lines(self) -> list[dict]:
+        """
+        Captura la pantalla y devuelve TODAS las líneas de texto detectadas por OCR.
+        Usa Windows.Media.Ocr (nativo Win10/11).
+        Returns: Lista de {"text": str, "x": int, "y": int, "width": int, "height": int}
+        """
+        import pyautogui
+        temp_path = os.path.join(tempfile.gettempdir(), "jarvis_ocr_lines.png")
+        try:
+            screenshot = pyautogui.screenshot()
+            screenshot.save(temp_path)
+
+            ps_script = f'''
+            Add-Type -AssemblyName System.Runtime.WindowsRuntime
+
+            $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {{
+                $_.Name -eq 'AsTask' -and
+                $_.GetParameters().Count -eq 1 -and
+                $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
+            }})[0]
+            Function Await($WinRtTask, $ResultType) {{
+                $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
+                $netTask = $asTask.Invoke($null, @($WinRtTask))
+                $netTask.Wait(-1) | Out-Null
+                $netTask.Result
+            }}
+
+            [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
+            [Windows.Graphics.Imaging.SoftwareBitmap, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
+            [Windows.Graphics.Imaging.BitmapDecoder, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
+            [Windows.Storage.Streams.RandomAccessStream, Windows.Storage.Streams, ContentType=WindowsRuntime] | Out-Null
+
+            $file = [System.IO.File]::OpenRead("{temp_path.replace(chr(92), '/')}")
+            $stream = [Windows.Storage.Streams.RandomAccessStream]::FromStream($file)
+            $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
+            $bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
+
+            $lang = New-Object Windows.Globalization.Language("es-ES")
+            $ocr = $null
+            if ([Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($lang)) {{
+                $ocr = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($lang)
+            }}
+            if ($null -eq $ocr) {{
+                $ocr = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
+            }}
+
+            $result = Await ($ocr.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])
+
+            foreach ($line in $result.Lines) {{
+                $words = $line.Words
+                if ($words.Count -gt 0) {{
+                    $minX = 99999; $minY = 99999; $maxX = 0; $maxY = 0
+                    foreach ($w in $words) {{
+                        $r = $w.BoundingRect
+                        if ($r.X -lt $minX) {{ $minX = $r.X }}
+                        if ($r.Y -lt $minY) {{ $minY = $r.Y }}
+                        $rx = $r.X + $r.Width
+                        $ry = $r.Y + $r.Height
+                        if ($rx -gt $maxX) {{ $maxX = $rx }}
+                        if ($ry -gt $maxY) {{ $maxY = $ry }}
+                    }}
+                    $cx = [int](($minX + $maxX) / 2)
+                    $cy = [int](($minY + $maxY) / 2)
+                    $w = [int]($maxX - $minX)
+                    $h = [int]($maxY - $minY)
+                    Write-Output "LINE:$cy|$cx|$w|$h|$($line.Text)"
+                }}
+            }}
+            $file.Close()
+            '''
+
+            result = subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                capture_output=True, text=True, timeout=15
+            )
+
+            lines = []
+            for raw_line in result.stdout.strip().split('\n'):
+                raw_line = raw_line.strip()
+                if raw_line.startswith('LINE:'):
+                    parts = raw_line[5:].split('|', 4)
+                    if len(parts) >= 5:
+                        lines.append({
+                            "y": int(parts[0]),
+                            "x": int(parts[1]),
+                            "width": int(parts[2]),
+                            "height": int(parts[3]),
+                            "text": parts[4],
+                        })
+
+            logger.debug(f"OCR detectó {len(lines)} líneas de texto")
+            return lines
+
+        except Exception as e:
+            logger.warning(f"Error en OCR de pantalla: {e}")
+            return []
+        finally:
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except Exception:
+                pass
+
+    def _ocr_find_coords(self, text: str, lines: list[dict] = None) -> Optional[tuple]:
+        """
+        Busca texto en pantalla via OCR y devuelve (x, y) sin hacer clic.
+        Si se pasan 'lines' ya obtenidas, las reutiliza (evita screenshot duplicado).
+        """
+        if lines is None:
+            lines = self._ocr_screen_lines()
+
+        search = text.lower().strip()
+
+        # 1. Buscar en línea completa (coincidencia parcial)
+        for line in lines:
+            if search in line["text"].lower():
+                return (line["x"], line["y"])
+
+        # 2. Buscar por palabras sueltas similares
+        best = None
+        best_dist = 9999
+        for line in lines:
+            for word in line["text"].lower().split():
+                # Limpiar signos de puntuación
+                clean_word = word.strip('.,;:!?¿¡"\'()[]{}')
+                if clean_word == search or search in clean_word or clean_word in search:
+                    dist = abs(len(clean_word) - len(search))
+                    if dist < best_dist:
+                        best_dist = dist
+                        best = (line["x"], line["y"])
+
+        return best
+
+    def click_first_result(self) -> str:
+        """
+        Hace clic en el primer resultado de búsqueda de la página actual.
+        Funciona con Google, Bing, DuckDuckGo, etc.
+        Usa OCR para encontrar el primer enlace/resultado en el área de contenido.
+        """
+        import pyautogui
+        try:
+            time.sleep(1.5)
+
+            lines = self._ocr_screen_lines()
+            if not lines:
+                return "No se pudo leer la pantalla."
+
+            screen_w, screen_h = pyautogui.size()
+
+            # Ordenar por posición Y (de arriba a abajo)
+            lines.sort(key=lambda l: l["y"])
+
+            # Palabras de navegación que NO son resultados de búsqueda
+            nav_keywords = {
+                'todo', 'imágenes', 'imagenes', 'videos', 'noticias', 'más', 'mas',
+                'productos', 'herramientas', 'videos cortos', 'modo ia',
+                'all', 'images', 'news', 'shopping', 'more', 'tools',
+                'nueva pestaña', 'nueva pestana', 'buscar',
+            }
+
+            # El umbral Y mínimo para ignorar barra de navegación/búsqueda
+            # Típicamente los resultados empiezan después del 15% superior de pantalla
+            min_y = int(screen_h * 0.15)
+
+            for line in lines:
+                y = line["y"]
+                text = line["text"]
+                text_lower = text.lower().strip()
+
+                # Saltar zona de navegación del navegador
+                if y < min_y:
+                    continue
+
+                # Saltar elementos de navegación de buscador
+                if text_lower in nav_keywords:
+                    continue
+
+                # Saltar textos muy cortos (botones, iconos)
+                if len(text) < 15:
+                    continue
+
+                # Saltar URLs
+                if text_lower.startswith('http') or '://' in text_lower:
+                    continue
+
+                # Saltar textos que parecen metadatos (fechas, snippets de URL)
+                if text_lower.startswith('https://') or '›' in text:
+                    continue
+
+                # Saltar textos que contienen solo dominios/rutas
+                if all(c in 'abcdefghijklmnopqrstuvwxyz0123456789.-/' for c in text_lower.replace(' ', '')):
+                    continue
+
+                # Este debería ser el primer resultado real
+                click_x = line["x"]
+                click_y = line["y"]
+                pyautogui.click(click_x, click_y)
+                logger.info(f"Primer resultado clickeado: '{text}' en ({click_x}, {click_y})")
+                return f"He entrado en el primer resultado: '{text[:60]}'"
+
+            return "No se encontró ningún resultado de búsqueda en la página."
+        except Exception as e:
+            logger.error(f"Error clickeando primer resultado: {e}")
+            return f"Error al entrar en el primer resultado: {e}"
+
+    def move_discord_user(self, username: str, channel: str) -> str:
+        """
+        Mueve un usuario de Discord a un canal de voz usando drag & drop.
+        Busca al usuario y al canal en la pantalla por OCR, luego arrastra.
+        """
+        import pyautogui
+        try:
+            time.sleep(1.0)
+
+            # Una sola captura OCR para encontrar ambos
+            lines = self._ocr_screen_lines()
+            if not lines:
+                return "No se pudo leer la pantalla."
+
+            # 1. Encontrar la posición del usuario
+            user_coords = self._ocr_find_coords(username, lines)
+            if not user_coords:
+                # Intentar con nombre parcial (solo primera parte)
+                first_word = username.split()[0] if ' ' in username else username
+                user_coords = self._ocr_find_coords(first_word, lines)
+
+            if not user_coords:
+                return f"No se encontró al usuario '{username}' en la pantalla."
+
+            # 2. Encontrar la posición del canal destino
+            channel_coords = self._ocr_find_coords(channel, lines)
+            if not channel_coords:
+                return f"No se encontró el canal '{channel}' en la pantalla."
+
+            user_x, user_y = user_coords
+            chan_x, chan_y = channel_coords
+
+            logger.info(
+                f"Moviendo usuario '{username}' ({user_x},{user_y}) "
+                f"→ canal '{channel}' ({chan_x},{chan_y})"
+            )
+
+            # 3. Drag & drop: arrastrar usuario al canal
+            pyautogui.moveTo(user_x, user_y)
+            time.sleep(0.3)
+            pyautogui.mouseDown()
+            time.sleep(0.5)
+            # Mover gradualmente para que Discord reconozca el drag
+            pyautogui.moveTo(chan_x, chan_y, duration=0.8)
+            time.sleep(0.3)
+            pyautogui.mouseUp()
+            time.sleep(0.5)
+
+            logger.info(f"Drag & drop completado: '{username}' → '{channel}'")
+            return f"Usuario '{username}' movido al canal '{channel}'."
+
+        except Exception as e:
+            logger.error(f"Error moviendo usuario en Discord: {e}")
+            return f"Error al mover usuario: {e}"
+
+    # ─── Brain reference (para features avanzados) ────────────
+
+    def set_brain(self, brain):
+        """Establece referencia al LLM para features como describe_and_click."""
+        self._brain = brain
+        logger.info("Brain reference establecida en SystemControl.")
+
+    # ─── Foco de ventanas ──────────────────────────────────────
+
+    def focus_window(self, app_name: str) -> str:
+        """Trae una ventana al primer plano por nombre de aplicación."""
+        try:
+            app_lower = app_name.lower().strip()
+            search = self._app_search_names.get(app_lower, app_name)
+
+            ps_script = f'''
+            Add-Type @"
+                using System;
+                using System.Runtime.InteropServices;
+                public class JarvisWinFocus {{
+                    [DllImport("user32.dll")]
+                    public static extern bool SetForegroundWindow(IntPtr hWnd);
+                    [DllImport("user32.dll")]
+                    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+                    [DllImport("user32.dll")]
+                    public static extern bool IsIconic(IntPtr hWnd);
+                }}
+"@
+            $procs = Get-Process | Where-Object {{ $_.MainWindowTitle -ne "" }}
+            $target = $null
+            foreach ($p in $procs) {{
+                if ($p.MainWindowTitle -like "*{search}*" -or
+                    $p.ProcessName -like "*{app_lower}*") {{
+                    $target = $p
+                    break
+                }}
+            }}
+            if ($target) {{
+                $hwnd = $target.MainWindowHandle
+                if ([JarvisWinFocus]::IsIconic($hwnd)) {{
+                    [JarvisWinFocus]::ShowWindow($hwnd, 9)
+                }}
+                [JarvisWinFocus]::SetForegroundWindow($hwnd)
+                Write-Output "FOCUSED:$($target.MainWindowTitle)"
+            }} else {{
+                Write-Output "NOT_FOUND"
+            }}
+            '''
+            result = subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                capture_output=True, text=True, timeout=10
+            )
+            output = result.stdout.strip()
+            if output.startswith("FOCUSED:"):
+                title = output.split("FOCUSED:", 1)[1]
+                logger.info(f"Ventana enfocada: {title}")
+                return f"Ventana '{title}' en primer plano."
+            return f"No se encontró ventana de '{app_name}'."
+        except Exception as e:
+            logger.error(f"Error enfocando ventana: {e}")
+            return f"Error al enfocar ventana: {e}"
+
+    def get_active_window_title(self) -> str:
+        """Devuelve el título de la ventana activa actualmente."""
+        try:
+            ps = '''
+            Add-Type @"
+                using System;
+                using System.Runtime.InteropServices;
+                using System.Text;
+                public class JarvisWinTitle {
+                    [DllImport("user32.dll")]
+                    public static extern IntPtr GetForegroundWindow();
+                    [DllImport("user32.dll", SetLastError=true)]
+                    public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+                }
+"@
+            $hwnd = [JarvisWinTitle]::GetForegroundWindow()
+            $sb = New-Object System.Text.StringBuilder 256
+            [JarvisWinTitle]::GetWindowText($hwnd, $sb, 256) | Out-Null
+            Write-Output $sb.ToString()
+            '''
+            result = subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps],
+                capture_output=True, text=True, timeout=5
+            )
+            return result.stdout.strip() or "Desconocido"
+        except Exception:
+            return "Desconocido"
+
+    # ─── Click inteligente por descripción ────────────────────
+
+    def describe_and_click(self, description: str) -> str:
+        """
+        Hace clic en un elemento descrito en lenguaje natural.
+        Usa OCR + filtrado espacial + LLM para localizar el elemento.
+        Ej: "el botón de enviar", "el enlace de arriba a la derecha",
+            "donde pone Configuración"
+        """
+        import pyautogui
+        try:
+            time.sleep(1.0)
+            lines = self._ocr_screen_lines()
+            if not lines:
+                return "No se pudo leer la pantalla."
+
+            desc_lower = description.lower()
+            screen_w, screen_h = pyautogui.size()
+
+            # ── Filtrar por posición si hay pistas espaciales ──
+            filtered = lines[:]
+            if any(w in desc_lower for w in ["arriba", "superior", "top", "parte de arriba"]):
+                filtered = [l for l in filtered if l["y"] < screen_h * 0.4]
+            elif any(w in desc_lower for w in ["abajo", "inferior", "bottom", "parte de abajo"]):
+                filtered = [l for l in filtered if l["y"] > screen_h * 0.6]
+
+            if any(w in desc_lower for w in ["izquierda", "left"]):
+                filtered = [l for l in filtered if l["x"] < screen_w * 0.45]
+            elif any(w in desc_lower for w in ["derecha", "right"]):
+                filtered = [l for l in filtered if l["x"] > screen_w * 0.55]
+
+            if any(w in desc_lower for w in ["centro", "center", "medio", "middle"]):
+                filtered = [l for l in filtered if
+                            screen_w * 0.2 < l["x"] < screen_w * 0.8
+                            and screen_h * 0.2 < l["y"] < screen_h * 0.8]
+
+            if not filtered:
+                filtered = lines
+
+            # ── Método 1: Usar LLM si está disponible ──
+            if self._brain:
+                options = []
+                for i, line in enumerate(filtered):
+                    options.append(f"{i}: \"{line['text']}\" (x={line['x']}, y={line['y']})")
+
+                options_text = "\n".join(options[:50])  # Limitar para no saturar
+                prompt = (
+                    f"El usuario quiere hacer clic en: \"{description}\"\n\n"
+                    f"Estos son los textos visibles en pantalla:\n{options_text}\n\n"
+                    f"Responde SOLO con el número del elemento que mejor coincida. "
+                    f"Si ninguno coincide, responde -1. Solo el número."
+                )
+                import re as _re
+                llm_response = self._brain.chat(prompt).strip()
+                num_match = _re.search(r'-?\d+', llm_response)
+                if num_match:
+                    idx = int(num_match.group())
+                    if 0 <= idx < len(filtered):
+                        target = filtered[idx]
+                        pyautogui.click(target["x"], target["y"])
+                        logger.info(f"LLM-click: '{target['text']}' en ({target['x']}, {target['y']})")
+                        return f"Clic realizado en '{target['text']}'"
+
+            # ── Método 2: Similitud de texto (fallback sin LLM) ──
+            # Quitar palabras espaciales/estructurales de la descripción
+            target_words = desc_lower
+            for sw in ["arriba", "abajo", "izquierda", "derecha", "centro",
+                        "superior", "inferior", "el", "la", "los", "las", "un", "una",
+                        "botón", "boton", "enlace", "link", "icono", "imagen",
+                        "de", "del", "en", "que", "dice", "pone", "se", "llama",
+                        "parte", "lado", "zona", "top", "bottom", "left", "right",
+                        "donde", "hay", "está", "esta"]:
+                target_words = target_words.replace(sw, " ")
+            target_words = " ".join(target_words.split()).strip()
+
+            if target_words:
+                best_match = None
+                best_score = 0
+                for line in filtered:
+                    line_lower = line["text"].lower()
+                    target_set = set(target_words.split())
+                    line_set = set(line_lower.split())
+                    overlap = len(target_set & line_set)
+                    # Bonus por substring
+                    if target_words in line_lower:
+                        overlap += 2
+                    if overlap > best_score:
+                        best_score = overlap
+                        best_match = line
+
+                if best_match and best_score > 0:
+                    pyautogui.click(best_match["x"], best_match["y"])
+                    logger.info(f"Click por similitud: '{best_match['text']}' en ({best_match['x']}, {best_match['y']})")
+                    return f"Clic realizado en '{best_match['text']}'"
+
+            # ── Método 3: Primer elemento corto (probablemente un botón/link) ──
+            for line in filtered:
+                if 3 < len(line["text"]) < 50:
+                    pyautogui.click(line["x"], line["y"])
+                    return f"Clic en '{line['text']}' (mejor aproximación)"
+
+            return f"No se encontró un elemento que coincida con '{description}'."
+        except Exception as e:
+            logger.error(f"Error en describe_and_click: {e}")
+            return f"Error: {e}"
+
+    # ─── Lectura de pantalla (contexto visual) ────────────────
+
+    def get_screen_text(self) -> str:
+        """
+        Devuelve todo el texto visible en pantalla como string.
+        Útil para dar contexto al LLM sobre qué hay en pantalla.
+        """
+        lines = self._ocr_screen_lines()
+        if not lines:
+            return "No se pudo leer la pantalla."
+        lines.sort(key=lambda l: (l["y"], l["x"]))
+        return "\n".join(line["text"] for line in lines)
+
+    # ─── Portapapeles ─────────────────────────────────────────
+
+    def read_clipboard(self) -> str:
+        """Lee el contenido actual del portapapeles."""
+        try:
+            result = subprocess.run(
+                ["powershell", "-command", "Get-Clipboard"],
+                capture_output=True, text=True, timeout=5
+            )
+            content = result.stdout.strip()
+            if content:
+                return f"Contenido del portapapeles: {content}"
+            return "El portapapeles está vacío."
+        except Exception as e:
+            return f"Error leyendo portapapeles: {e}"
+
+    def copy_to_clipboard(self, text: str) -> str:
+        """Copia texto al portapapeles."""
+        try:
+            escaped = text.replace("'", "''")
+            subprocess.run(
+                ["powershell", "-command", f"Set-Clipboard -Value '{escaped}'"],
+                check=True, timeout=5,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            return "Texto copiado al portapapeles."
+        except Exception as e:
+            return f"Error copiando al portapapeles: {e}"
+
+    # ─── Escritura de texto largo (para soluciones, documentos) ─
+
+    def type_long_text(self, text: str) -> str:
+        """
+        Escribe texto largo en la aplicación activa.
+        Usa el portapapeles en bloques para manejar Unicode y velocidad.
+        """
+        import pyautogui
+        try:
+            time.sleep(0.5)
+            paragraphs = text.split('\n')
+            for i, para in enumerate(paragraphs):
+                if not para.strip():
+                    pyautogui.press('enter')
+                    continue
+
+                escaped = para.replace("'", "''")
+                subprocess.run(
+                    ["powershell", "-command", f"Set-Clipboard -Value '{escaped}'"],
+                    check=True, timeout=5,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                pyautogui.hotkey('ctrl', 'v')
+                time.sleep(0.1)
+                if i < len(paragraphs) - 1:
+                    pyautogui.press('enter')
+                    time.sleep(0.05)
+
+            return f"Texto escrito ({len(text)} caracteres)."
+        except Exception as e:
+            logger.error(f"Error escribiendo texto largo: {e}")
+            return f"Error al escribir: {e}"
+
+    # ─── Gestión de pestañas ─────────────────────────────────
+
+    def switch_tab(self, direction: str = "next") -> str:
+        """Cambia de pestaña en el navegador/aplicación."""
+        import pyautogui
+        try:
+            if direction.lower() in ("previous", "anterior", "prev", "izquierda"):
+                pyautogui.hotkey('ctrl', 'shift', 'tab')
+            else:
+                pyautogui.hotkey('ctrl', 'tab')
+            return f"Pestaña cambiada ({direction})."
+        except Exception as e:
+            return f"Error cambiando pestaña: {e}"
+
+    def new_tab(self) -> str:
+        """Abre una nueva pestaña en el navegador/aplicación."""
+        import pyautogui
+        try:
+            pyautogui.hotkey('ctrl', 't')
+            return "Nueva pestaña abierta."
+        except Exception as e:
+            return f"Error: {e}"
+
+    def close_tab(self) -> str:
+        """Cierra la pestaña actual."""
+        import pyautogui
+        try:
+            pyautogui.hotkey('ctrl', 'w')
+            return "Pestaña cerrada."
+        except Exception as e:
+            return f"Error: {e}"
+
+    # ─── Gestión de ventanas ─────────────────────────────────
+
+    def minimize_window(self) -> str:
+        """Minimiza la ventana activa."""
+        import pyautogui
+        try:
+            pyautogui.hotkey('win', 'down')
+            return "Ventana minimizada."
+        except Exception as e:
+            return f"Error: {e}"
+
+    def maximize_window(self) -> str:
+        """Maximiza la ventana activa."""
+        import pyautogui
+        try:
+            pyautogui.hotkey('win', 'up')
+            return "Ventana maximizada."
+        except Exception as e:
+            return f"Error: {e}"
+
+    def snap_window(self, position: str = "left") -> str:
+        """Ajusta la ventana a un lado de la pantalla (snap)."""
+        import pyautogui
+        try:
+            if position.lower() in ("left", "izquierda"):
+                pyautogui.hotkey('win', 'left')
+            elif position.lower() in ("right", "derecha"):
+                pyautogui.hotkey('win', 'right')
+            else:
+                pyautogui.hotkey('win', 'up')
+            return f"Ventana ajustada a {position}."
+        except Exception as e:
+            return f"Error: {e}"
+
     def type_in_app(self, text: str) -> str:
         """Escribe texto en la aplicación activa."""
         import pyautogui
@@ -648,67 +1403,59 @@ class SystemControl:
         """
         Selecciona un perfil en una aplicación (Chrome, Firefox, etc.).
         Espera a que la ventana de selección de perfil aparezca y hace clic.
+        Usa OCR como método principal (Chrome/Electron no exponen bien sus elementos).
         """
         import pyautogui
         try:
-            # Esperar a que la ventana de perfil cargue
-            time.sleep(3.0)
+            # Esperar a que la ventana de perfil cargue completamente
+            time.sleep(4.0)
 
-            # Intentar con UI Automation primero
+            # MÉTODO 1: OCR (más fiable para Chrome, Brave, Edge, etc.)
+            result = self._find_and_click_via_ocr(profile_name)
+            if result:
+                logger.info(f"Perfil '{profile_name}' encontrado por OCR")
+                return f"Perfil '{profile_name}' seleccionado"
+
+            # MÉTODO 2: UI Automation (funciona con algunas apps nativas)
             result = self._find_and_click_ui_element(profile_name)
             if result:
                 return f"Perfil '{profile_name}' seleccionado"
 
-            # Fallback: buscar usando Alt+Tab y luego buscar texto
-            # En Chrome, los perfiles aparecen como botones con el nombre
-            # Intentamos Tab para navegar y Enter para seleccionar
-            logger.info(f"Buscando perfil '{profile_name}' con método alternativo")
+            # MÉTODO 3: Buscar variantes del nombre (sin acentos, capitalizado, etc.)
+            import unicodedata
+            def remove_accents(s):
+                nfkd = unicodedata.normalize('NFKD', s)
+                return ''.join(c for c in nfkd if not unicodedata.combining(c))
 
-            # Tomar screenshot para ubicar el perfil
-            screenshot = pyautogui.screenshot()
-            width, height = screenshot.size
+            variants = [
+                profile_name,
+                profile_name.capitalize(),
+                profile_name.upper(),
+                profile_name.lower(),
+                remove_accents(profile_name),
+                remove_accents(profile_name).capitalize(),
+            ]
+            # Eliminar duplicados preservando orden
+            seen = set()
+            unique_variants = []
+            for v in variants:
+                if v not in seen:
+                    seen.add(v)
+                    unique_variants.append(v)
 
-            # Los botones de perfil de Chrome suelen estar en el centro
-            # Intentamos hacer clic en la zona del selector de perfil
-            # Primero intentamos buscar por UI Automation con búsqueda parcial
-            ps_script = f'''
-            Add-Type -AssemblyName UIAutomationClient
-            Add-Type -AssemblyName UIAutomationTypes
-            $root = [System.Windows.Automation.AutomationElement]::RootElement
-            $allCondition = [System.Windows.Automation.Condition]::TrueCondition
-            $elements = $root.FindAll(
-                [System.Windows.Automation.TreeScope]::Descendants,
-                $allCondition
-            )
-            $found = $false
-            foreach ($el in $elements) {{
-                try {{
-                    $name = $el.Current.Name
-                    if ($name -and $name -like "*{profile_name}*") {{
-                        $rect = $el.Current.BoundingRectangle
-                        if ($rect.Width -gt 0 -and $rect.Height -gt 0 -and $rect.Width -lt 1000) {{
-                            $x = [int]($rect.X + $rect.Width / 2)
-                            $y = [int]($rect.Y + $rect.Height / 2)
-                            Write-Output "$x,$y"
-                            $found = $true
-                            break
-                        }}
-                    }}
-                }} catch {{}}
-            }}
-            if (-not $found) {{ Write-Output "NOT_FOUND" }}
-            '''
-            result = subprocess.run(
-                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-                capture_output=True, text=True, timeout=15
-            )
-            output = result.stdout.strip()
-            if output and output != "NOT_FOUND" and ',' in output:
-                coords = output.strip().split('\n')[-1]
-                x, y = map(int, coords.split(','))
-                pyautogui.click(x, y)
-                logger.info(f"Perfil '{profile_name}' encontrado y clickeado en ({x}, {y})")
-                return f"Perfil '{profile_name}' seleccionado"
+            for variant in unique_variants[1:]:  # Saltar el primero (ya probado)
+                result = self._find_and_click_via_ocr(variant)
+                if result:
+                    logger.info(f"Perfil encontrado como '{variant}' por OCR")
+                    return f"Perfil '{profile_name}' seleccionado"
+
+            # MÉTODO 4: Último recurso - Tab para navegar entre perfiles
+            logger.info(f"Intentando navegar con Tab para encontrar '{profile_name}'")
+            for i in range(12):  # Navegar hasta 12 elementos
+                pyautogui.press('tab')
+                time.sleep(0.3)
+                # Hacer Enter si estamos en el perfil correcto
+                # (esto es una heurística, funciona cuando Chrome resalta el perfil)
 
             return f"No se encontró el perfil '{profile_name}'. Intente seleccionarlo manualmente."
         except Exception as e:

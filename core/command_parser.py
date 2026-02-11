@@ -130,6 +130,48 @@ class CommandParser:
             ),
         ])
 
+        # ─── Resolución de ejercicios (workflow multi-paso) ───
+        patterns.extend([
+            (
+                re.compile(
+                    r"(?:resuelve|resolver|haz|hacer|soluciona|solucionar|completa|completar)\s+"
+                    r"(?:(?:los?|el)\s+)?(?:ejercicios?\s+)?(?:del?\s+)?(?:pdf|documento|archivo)\s+"
+                    r"(.+?)(?:\s+en\s+(.+?))?\s*$",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "solve_exercises",
+                lambda m: {
+                    "file_path": m.group(1).strip().strip('"\'"),
+                    "output_app": m.group(2).strip().strip('"\'") if m.group(2) else "",
+                },
+            ),
+            (
+                re.compile(
+                    r"(?:resuelve|resolver|haz|hacer)\s+(?:los?\s+)?ejercicios?\s+(?:que\s+)?(?:hay|tiene|están?)\s+"
+                    r"(?:en\s+)?(?:el\s+)?(?:pdf|documento|archivo)\s+(.+?)(?:\s+(?:y\s+)?(?:escr[ií]be|pon|mete)(?:los?)?\s+en\s+(.+?))?\s*$",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "solve_exercises",
+                lambda m: {
+                    "file_path": m.group(1).strip().strip('"\'"),
+                    "output_app": m.group(2).strip().strip('"\'") if m.group(2) else "",
+                },
+            ),
+            # "contesta las preguntas del PDF X"
+            (
+                re.compile(
+                    r"(?:contesta|contestar|responde|responder)\s+(?:las?\s+)?(?:preguntas?|cuestiones?)\s+"
+                    r"(?:del?\s+)?(?:pdf|documento|archivo)\s+(.+?)(?:\s+en\s+(.+?))?\s*$",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "solve_exercises",
+                lambda m: {
+                    "file_path": m.group(1).strip().strip('"\'"),
+                    "output_app": m.group(2).strip().strip('"\'") if m.group(2) else "",
+                },
+            ),
+        ])
+
         # ─── Control del Sistema ──────────────────────────────
         patterns.extend([
             (
@@ -383,6 +425,151 @@ class CommandParser:
                 "system_control", "scroll_page",
                 lambda m: {"direction": "up" if any(w in m.group(0).lower() for w in ["arriba", "up"]) else "down"},
             ),
+            # ─── Describe and click (clic por descripción con LLM) ──
+            (
+                re.compile(
+                    r"(?:haz\s+clic|clic|click|pulsa|pincha)\s+(?:en\s+)?"
+                    r"(?:donde\s+(?:pone|dice|hay|est[aá]|esta)|lo\s+que\s+(?:dice|pone))\s+(.+)",
+                    re.IGNORECASE,
+                ),
+                "system_control", "describe_and_click",
+                lambda m: {"description": m.group(1).strip()},
+            ),
+            (
+                re.compile(
+                    r"(?:haz\s+clic|clic|click|pulsa|pincha)\s+(?:en\s+)?"
+                    r"(?:el\s+|la\s+|los\s+|las\s+)?(?:bot[oó]n|enlace|link|icono|opci[oó]n)\s+"
+                    r"(?:de\s+|que\s+(?:dice|pone)\s+)?(.+)",
+                    re.IGNORECASE,
+                ),
+                "system_control", "describe_and_click",
+                lambda m: {"description": m.group(1).strip()},
+            ),
+            # ─── Focus window / enfoque de ventana ──
+            (
+                re.compile(
+                    r"(?:enfoca|enfocar|pon|cambia\s+a|switch\s+to|focus|trae|traer)\s+"
+                    r"(?:la\s+)?(?:ventana\s+(?:de\s+)?|window\s+)?(.+)",
+                    re.IGNORECASE,
+                ),
+                "system_control", "focus_window",
+                lambda m: {"app_name": m.group(1).strip()},
+            ),
+            # ─── Portapapeles ──
+            (
+                re.compile(
+                    r"(?:lee|leer|qu[eé]\s+hay|que\s+hay|muestra|mostrar|dime)\s+"
+                    r"(?:en\s+)?(?:el\s+)?(?:portapapeles|clipboard)",
+                    re.IGNORECASE,
+                ),
+                "system_control", "read_clipboard",
+                lambda m: {},
+            ),
+            (
+                re.compile(
+                    r"(?:copia|copiar|copy)\s+(?:al\s+)?(?:portapapeles|clipboard)\s+(.+)",
+                    re.IGNORECASE,
+                ),
+                "system_control", "copy_to_clipboard",
+                lambda m: {"text": m.group(1).strip()},
+            ),
+            # ─── Lectura de pantalla (qué hay en pantalla) ──
+            (
+                re.compile(
+                    r"(?:qu[eé]|que|what)\s+(?:hay|pone|dice|se\s+ve|aparece)\s+"
+                    r"(?:en\s+)?(?:la\s+)?(?:pantalla|screen)",
+                    re.IGNORECASE,
+                ),
+                "system_control", "get_screen_text",
+                lambda m: {},
+            ),
+            (
+                re.compile(
+                    r"(?:lee|leer|describe|describir)\s+(?:la\s+)?(?:pantalla|screen)",
+                    re.IGNORECASE,
+                ),
+                "system_control", "get_screen_text",
+                lambda m: {},
+            ),
+            # ─── Gestión de pestañas ──
+            (
+                re.compile(
+                    r"(?:abre|abrir|open)\s+(?:una\s+)?(?:nueva\s+)?(?:pesta[\u00f1n]a|tab)",
+                    re.IGNORECASE,
+                ),
+                "system_control", "new_tab",
+                lambda m: {},
+            ),
+            (
+                re.compile(
+                    r"(?:cierra|cerrar|close)\s+(?:la\s+|esta\s+)?(?:pesta[\u00f1n]a|tab)",
+                    re.IGNORECASE,
+                ),
+                "system_control", "close_tab",
+                lambda m: {},
+            ),
+            (
+                re.compile(
+                    r"(?:cambia|cambiar|switch|pasa|pasar)\s+(?:de\s+|a\s+(?:la\s+)?)?"
+                    r"(?:(?:siguiente|anterior|next|previous|prev)\s+)?"
+                    r"(?:pesta[\u00f1n]a|tab)(?:\s+(?:siguiente|anterior|next|previous|prev))?",
+                    re.IGNORECASE,
+                ),
+                "system_control", "switch_tab",
+                lambda m: {"direction": "previous" if any(w in m.group(0).lower()
+                           for w in ["anterior", "previous", "prev"]) else "next"},
+            ),
+            # ─── Gestión de ventanas ──
+            (
+                re.compile(
+                    r"(?:minimiza|minimizar|minimize)\s+(?:la\s+)?(?:ventana|window)?",
+                    re.IGNORECASE,
+                ),
+                "system_control", "minimize_window",
+                lambda m: {},
+            ),
+            (
+                re.compile(
+                    r"(?:maximiza|maximizar|maximize)\s+(?:la\s+)?(?:ventana|window)?",
+                    re.IGNORECASE,
+                ),
+                "system_control", "maximize_window",
+                lambda m: {},
+            ),
+            (
+                re.compile(
+                    r"(?:ajusta|ajustar|snap)\s+(?:la\s+)?(?:ventana|window)\s+"
+                    r"(?:a\s+)?(?:la\s+)?(izquierda|derecha|left|right)",
+                    re.IGNORECASE,
+                ),
+                "system_control", "snap_window",
+                lambda m: {"position": m.group(1).strip()},
+            ),
+            # ─── Primer link/resultado (ANTES de 'entra en' genérico) ──
+            (
+                re.compile(
+                    r"(?:entra|entrar|enter|abre|abrir|open|haz\s+clic|clic|click|pulsa|pincha)\s+"
+                    r"(?:en\s+)?(?:el\s+)?(?:primer|first|1(?:er|ro)?)\s+"
+                    r"(?:link|enlace|resultado|result)(?:\s+(?:de\s+)?(?:google|bing|la\s+búsqueda|busqueda|la\s+página|pagina))?",
+                    re.IGNORECASE,
+                ),
+                "system_control", "click_first_result",
+                lambda m: {},
+            ),
+            # ─── Mover usuario a canal de voz (Discord, TeamSpeak, etc.) ──
+            (
+                re.compile(
+                    r"(?:mueve|mover|muevas|mueva|move|arrastra|arrastrar|lleva|llevar|traslada|trasladar)\s+"
+                    r"(?:al?\s+)?(?:usuario\s+)?(.+?)\s+"
+                    r"(?:al?\s+)?(?:el\s+)?canal\s+(?:de\s+voz\s+)?(.+?)\s*$",
+                    re.IGNORECASE,
+                ),
+                "system_control", "move_discord_user",
+                lambda m: {
+                    "username": m.group(1).strip().strip('"\'"),
+                    "channel": m.group(2).strip().strip('"\'"),
+                },
+            ),
             (
                 re.compile(
                     r"(?:entra|entrar|enter|accede|acceder)\s+(?:a|en|al|to)\s+(.+)",
@@ -502,6 +689,10 @@ class CommandParser:
             r"|clic|click|pulsa|pincha|presiona"
             r"|navega|navegar|escribe|escribir|teclea"
             r"|scroll|desplaza"
+            r"|mueve|mover|muevas|mueva|arrastra|arrastrar|lleva|llevar"
+            r"|resuelve|resolver|soluciona|completa|contesta|responde"
+            r"|enfoca|enfocar|cambia|minimiza|maximiza"
+            r"|copia|copiar|lee|leer|describe"
         )
 
         # Paso 1: dividir por 'y' / 'y luego' / 'y después' / comas
@@ -625,11 +816,15 @@ class CommandParser:
 
         greetings = [
             r"^hola$", r"^hey$", r"^hello$", r"^hi$",
-            r"^buenos\s+días$", r"^buenas\s+tardes$", r"^buenas\s+noches$",
+            r"^buenos\s+d[ií]as$", r"^buenas\s+tardes$", r"^buenas\s+noches$",
             r"^good\s+morning$", r"^good\s+afternoon$", r"^good\s+evening$",
-            r"^qué\s+tal$", r"^cómo\s+estás$", r"^que\s+tal$",
-            r"^hola\s+que\s+tal$", r"^hola\s+qué\s+tal$",
+            r"^qu[eé]\s+tal$", r"^c[oó]mo\s+est[aá]s$", r"^como\s+estas$",
+            r"^como\s+andas$", r"^c[oó]mo\s+andas$",
+            r"^como\s+va\s+(?:eso|todo)$", r"^c[oó]mo\s+va\s+(?:eso|todo)$",
+            r"^hola\s+qu[eé]\s+tal$", r"^hola\s+como\s+est[aá]s$",
             r"^buenas$", r"^saludos$",
+            r"^qu[eé]\s+hay$", r"^que\s+hay$",
+            r"^hola\s+jarvis$",
         ]
         for greeting in greetings:
             if re.search(greeting, text_clean):

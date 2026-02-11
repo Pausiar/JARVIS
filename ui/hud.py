@@ -71,7 +71,9 @@ class JarvisHUD(QMainWindow):
         self.voice_output = voice_output
         self._is_recording = False
         self._is_maximized = False
+        self._is_processing = False
         self._worker_thread: Optional[QThread] = None
+        self._worker: Optional[MessageWorker] = None
 
         self._setup_window()
         self._setup_ui()
@@ -313,9 +315,29 @@ class JarvisHUD(QMainWindow):
             )
             return
 
-        # Cambiar estado a procesando
+        # Bloquear si ya hay un mensaje en proceso
+        if self._is_processing:
+            self._add_assistant_message(
+                "Un momento, señor. Aún estoy procesando su solicitud anterior."
+            )
+            return
+
+        self._is_processing = True
+
+        # Cambiar estado a procesando y deshabilitar toda la entrada
         self._set_state("processing", "Procesando...")
-        self.send_button.setEnabled(False)
+        self._set_input_enabled(False)
+
+        # Limpiar hilo anterior si existe
+        if self._worker_thread is not None:
+            if self._worker_thread.isRunning():
+                self._worker_thread.quit()
+                self._worker_thread.wait(2000)
+            self._worker_thread.deleteLater()
+            self._worker_thread = None
+        if self._worker is not None:
+            self._worker.deleteLater()
+            self._worker = None
 
         # Ejecutar en hilo separado
         self._worker_thread = QThread()
@@ -330,12 +352,20 @@ class JarvisHUD(QMainWindow):
 
         self._worker_thread.start()
 
+    def _set_input_enabled(self, enabled: bool):
+        """Habilita o deshabilita todos los controles de entrada."""
+        self.send_button.setEnabled(enabled)
+        self.input_field.setEnabled(enabled)
+        self.mic_button.setEnabled(enabled)
+
     @Slot(str)
     def _on_response(self, response: str):
         """Callback cuando el LLM responde."""
+        self._is_processing = False
         self._add_assistant_message(response)
         self._set_state("idle", "Listo")
-        self.send_button.setEnabled(True)
+        self._set_input_enabled(True)
+        self.input_field.setFocus()
 
         # TTS
         if self.voice_output and self.voice_output.enabled:
@@ -347,11 +377,13 @@ class JarvisHUD(QMainWindow):
     @Slot(str)
     def _on_error(self, error: str):
         """Callback en caso de error."""
+        self._is_processing = False
         self._add_assistant_message(
             f"Me temo que ha ocurrido un error, señor: {error}"
         )
         self._set_state("error", "Error")
-        self.send_button.setEnabled(True)
+        self._set_input_enabled(True)
+        self.input_field.setFocus()
         QTimer.singleShot(3000, lambda: self._set_state("idle", "Listo"))
 
     # ─── Chat UI ──────────────────────────────────────────────

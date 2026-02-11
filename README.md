@@ -17,28 +17,29 @@ Asistente de escritorio con IA para Windows 10/11, inspirado en el J.A.R.V.I.S. 
 | Módulo | Descripción |
 |--------|-------------|
 | 🧠 **Cerebro IA** | Conversación natural con Ollama (Mistral), 100% local |
-| 🎙️ **Voz** | Entrada por voz (Whisper) + Salida TTS (pyttsx3) |
-| ⚙️ **Sistema** | Abre apps usando la búsqueda de Windows (como lo harías tú) |
+| 🎙️ **Voz** | Entrada por voz (faster-whisper) + Salida TTS (Piper, voz natural en español) |
+| 👁️ **Visión OCR** | Lee la pantalla con Windows.Media.Ocr nativo — clic inteligente por descripción |
+| ⚙️ **Sistema** | Abre/cierra apps, volumen, brillo, ventanas, pestañas |
 | 🌐 **Web** | "Busca X" abre una pestaña real de Google en tu navegador |
 | 📁 **Archivos** | Abrir, crear, mover, copiar, buscar, organizar archivos |
 | 📄 **Documentos** | Leer PDF, Word, Excel, CSV, JSON, TXT |
+| 📝 **Resolver ejercicios** | Lee un PDF con ejercicios, los resuelve y escribe las soluciones en Word/Google Docs |
 | 📧 **Email** | Envío de correos con SMTP |
 | 💻 **Código** | Ejecutar Python en sandbox seguro |
 | ⏰ **Automatización** | Timers, recordatorios, tareas programadas |
 | 🧠 **Memoria** | Recuerda conversaciones y preferencias (SQLite) |
+| 📋 **Portapapeles** | Leer y escribir en el portapapeles de Windows |
+| 🪟 **Gestión de ventanas** | Enfocar, minimizar, maximizar, snap (ajustar a lados) |
 
 ---
 
 ## 📋 Requisitos previos
-
-Antes de instalar JARVIS necesitas tener instalado:
 
 ### 1. Python 3.11 o superior
 
 Descárgalo de [python.org](https://www.python.org/downloads/).  
 **Importante**: Marca la casilla **"Add Python to PATH"** durante la instalación.
 
-Verifica que está instalado:
 ```powershell
 python --version
 # Debe mostrar Python 3.11.x o superior
@@ -48,20 +49,17 @@ python --version
 
 Descárgalo de [ollama.com](https://ollama.com/download) e instálalo normalmente.
 
-Verifica que está instalado:
 ```powershell
 ollama --version
 ```
 
-### 3. Git (para clonar el repositorio)
+### 3. Git
 
 Descárgalo de [git-scm.com](https://git-scm.com/download/win) si no lo tienes.
 
 ---
 
 ## 🚀 Instalación paso a paso
-
-Abre una terminal (PowerShell o CMD) y ejecuta estos comandos uno por uno:
 
 ### Paso 1 — Clonar el repositorio
 
@@ -77,51 +75,34 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-> Si usas CMD en vez de PowerShell: `.\.venv\Scripts\activate.bat`
+> Si usas CMD: `.\.venv\Scripts\activate.bat`
 
-### Paso 3 — Instalar dependencias de Python
+### Paso 3 — Instalar dependencias
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-Si alguna dependencia falla, instala las esenciales manualmente:
+Si alguna dependencia falla, instala las esenciales:
 ```powershell
-pip install PySide6 requests psutil pyttsx3 keyboard pynput pyautogui faster-whisper numpy sounddevice pycaw comtypes
+pip install PySide6 requests psutil keyboard pynput pyautogui faster-whisper numpy sounddevice pycaw comtypes PyMuPDF python-docx openpyxl Pillow piper-tts
 ```
 
 ### Paso 4 — Descargar el modelo de IA
 
-Asegúrate de que Ollama esté corriendo (se inicia automáticamente con Windows, pero si no):
 ```powershell
-ollama serve
-```
-
-En otra terminal, descarga el modelo Mistral (~4.4 GB):
-```powershell
-ollama pull mistral
+ollama serve          # En una terminal (si no está corriendo ya)
+ollama pull mistral   # En otra terminal (~4.4 GB)
 ```
 
 ### Paso 5 — Ejecutar JARVIS
 
 ```powershell
-cd JARVIS
 .\.venv\Scripts\Activate.ps1
 python main.py
 ```
 
-Si todo está bien, verás en la terminal:
-```
-  J.A.R.V.I.S. — Inicializando...
-  LLM (Ollama): ✅ Conectado
-  STT (Whisper): ✅ Listo
-  TTS: ✅ Listo
-  Orquestador: ✅ Listo
-  JARVIS inicializado correctamente.
-  JARVIS está listo. Esperando instrucciones...
-```
-
-Y se abrirá la ventana HUD con el tema Arc Reactor (cian).
+Se abrirá la ventana HUD con el tema Arc Reactor (cian).
 
 ---
 
@@ -129,27 +110,75 @@ Y se abrirá la ventana HUD con el tema Arc Reactor (cian).
 
 ### Interfaz gráfica (HUD)
 
-- **Escribir**: Usa la barra de texto en la parte inferior de la ventana
-- **Hablar**: Pulsa el botón del micrófono 🎙️
-- **Atajo global**: `Ctrl+Shift+J` para mostrar/ocultar la ventana desde cualquier sitio
+- **Escribir**: Barra de texto en la parte inferior
+- **Hablar**: Botón del micrófono 🎙️
+- **Atajo global**: `Ctrl+Shift+J` para mostrar/ocultar desde cualquier sitio
 
-### Ejemplos de comandos
+### Catálogo de comandos
 
-| Dices / Escribes | Qué hace JARVIS |
+#### 🖥️ Control del sistema
+| Comando | Qué hace |
 |---|---|
-| `Abre Chrome` | Abre Google Chrome usando la búsqueda de Windows |
-| `Abre IntelliJ` | Busca IntelliJ IDEA en Windows y lo abre |
-| `Busca recetas de pasta` | Abre una pestaña de Google con la búsqueda |
-| `Abre Chrome y busca hola` | Abre Chrome Y luego busca "hola" en Google |
-| `¿Qué hora es?` | Te dice la hora actual |
-| `¿Qué día es?` | Te dice la fecha actual |
-| `Sube el volumen` | Sube el volumen 10% |
-| `Pon el volumen al 50` | Establece el volumen al 50% |
-| `Haz una captura de pantalla` | Captura la pantalla y la guarda |
-| `Cierra Chrome` | Cierra Google Chrome |
-| `Apaga el PC` | Apaga el sistema (con 5s de delay) |
+| `Abre Chrome` | Abre Google Chrome con la búsqueda de Windows |
+| `Cierra Discord` | Cierra Discord |
+| `Sube el volumen` | +10% de volumen |
+| `Pon el volumen al 50` | Volumen al 50% |
+| `Silencia` | Mute/unmute |
+| `Sube el brillo` | +10% de brillo |
+| `Captura de pantalla` | Screenshot al escritorio |
+| `¿Qué hora es?` / `¿Qué día es?` | Hora y fecha actual |
+| `Info del sistema` | CPU, RAM, disco, batería |
+| `Apaga el PC` / `Reinicia` | Apagar/reiniciar |
 
-Para cualquier cosa que no sea un comando directo, JARVIS usa el LLM (Mistral) para entender tu petición y responderte de forma conversacional.
+#### 👁️ Interacción visual (OCR)
+| Comando | Qué hace |
+|---|---|
+| `Haz clic donde pone Configuración` | Busca el texto en pantalla por OCR y hace clic |
+| `Pulsa en el botón de enviar` | Clic inteligente por descripción con LLM |
+| `Entra en el primer resultado` | Clic en el primer resultado de Google |
+| `¿Qué hay en la pantalla?` | Lee todo el texto visible con OCR |
+| `Lee la pantalla` | Igual que arriba |
+
+#### 🪟 Ventanas y pestañas
+| Comando | Qué hace |
+|---|---|
+| `Enfoca la ventana de Discord` | Trae Discord al primer plano |
+| `Cambia a Chrome` | Foco a Chrome |
+| `Nueva pestaña` | Ctrl+T |
+| `Cierra la pestaña` | Ctrl+W |
+| `Cambia de pestaña` | Ctrl+Tab |
+| `Minimiza la ventana` | Minimiza la ventana activa |
+| `Maximiza` | Maximiza la ventana activa |
+| `Ajusta la ventana a la izquierda` | Snap left |
+
+#### 📝 Documentos y ejercicios
+| Comando | Qué hace |
+|---|---|
+| `Lee el PDF C:/docs/resumen.pdf` | Lee y devuelve el contenido |
+| `Resume el documento C:/docs/trabajo.docx` | Resumen con IA |
+| `Resuelve los ejercicios del PDF C:/docs/mates.pdf` | Resuelve con IA y muestra las soluciones |
+| `Haz los ejercicios del PDF examen.pdf en Word` | Resuelve y escribe automáticamente en Word |
+| `Contesta las preguntas del PDF test.pdf en Google Docs` | Resuelve y escribe en Google Docs |
+
+#### 🔊 Discord
+| Comando | Qué hace |
+|---|---|
+| `Mueve al usuario "Pausiar" al canal de voz "sala"` | Drag & drop por OCR |
+
+#### 📋 Portapapeles
+| Comando | Qué hace |
+|---|---|
+| `Lee el portapapeles` | Muestra el contenido actual |
+| `Copia al portapapeles hola mundo` | Copia texto |
+
+#### 🌐 Búsqueda web
+| Comando | Qué hace |
+|---|---|
+| `Busca recetas de pasta` | Abre Google con la búsqueda |
+| `Busca noticias sobre IA` | Abre Google News |
+
+#### 🎙️ Conversación
+Cualquier cosa que no sea un comando directo se envía al LLM (Mistral) para respuesta conversacional en español.
 
 ---
 
@@ -157,35 +186,40 @@ Para cualquier cosa que no sea un comando directo, JARVIS usa el LLM (Mistral) p
 
 ```
 JARVIS/
-├── main.py                   # Punto de entrada — ejecutar con: python main.py
-├── config.py                 # Configuración global (modelo, hotkeys, TTS, etc.)
-├── requirements.txt          # Lista de dependencias Python
+├── main.py                   # Punto de entrada
+├── config.py                 # Configuración global
+├── requirements.txt          # Dependencias Python
 ├── setup.py                  # Script de instalación alternativo
 │
 ├── core/                     # Núcleo del sistema
 │   ├── brain.py              # Conexión con Ollama (LLM local)
 │   ├── voice_input.py        # Reconocimiento de voz (faster-whisper)
-│   ├── voice_output.py       # Síntesis de voz (pyttsx3)
-│   ├── command_parser.py     # Detecta intenciones por regex
-│   └── orchestrator.py       # Orquestador central (conecta todo)
+│   ├── voice_output.py       # Síntesis de voz (Piper TTS)
+│   ├── command_parser.py     # Detección de intenciones por regex
+│   └── orchestrator.py       # Orquestador central + workflows multi-paso
 │
 ├── modules/                  # Módulos funcionales
-│   ├── system_control.py     # Abrir/cerrar apps, volumen, brillo, etc.
-│   ├── web_search.py         # Búsquedas en Google (abre pestaña real)
+│   ├── system_control.py     # Apps, volumen, brillo, OCR, ventanas, pestañas, portapapeles
+│   ├── web_search.py         # Búsquedas en Google (pestaña real)
 │   ├── file_manager.py       # Gestión de archivos
-│   ├── document_processor.py # Lectura de PDF, Word, Excel
+│   ├── document_processor.py # PDF, Word, Excel, CSV, JSON
 │   ├── email_manager.py      # Envío de email SMTP
 │   ├── code_executor.py      # Ejecutar código Python
 │   ├── automation.py         # Timers, recordatorios, rutinas
 │   └── memory.py             # Memoria persistente (SQLite)
 │
 ├── ui/                       # Interfaz gráfica
-│   ├── hud.py                # Ventana HUD principal
+│   ├── hud.py                # Ventana HUD principal (PySide6)
 │   ├── styles.py             # Estilos QSS (tema cyan Arc Reactor)
 │   └── widgets.py            # Widgets personalizados
 │
+├── tests/                    # Tests unitarios
+│   ├── test_brain.py
+│   ├── test_modules.py
+│   └── test_voice.py
+│
 └── data/                     # Datos (se genera automáticamente)
-    ├── memory.db             # Base de datos de conversaciones
+    ├── memory.db             # Base de datos conversaciones
     └── logs/                 # Logs del sistema
 ```
 
@@ -193,40 +227,68 @@ JARVIS/
 
 ## ⚙️ Configuración
 
-El archivo `config.py` contiene toda la configuración. Lo más relevante:
+Archivo `config.py`:
 
-| Parámetro | Valor por defecto | Descripción |
+| Parámetro | Valor | Descripción |
 |---|---|---|
-| `OLLAMA_MODEL` | `mistral` | Modelo de IA (puede ser `llama3`, `phi3`, etc.) |
-| `WHISPER_MODEL` | `base` | Modelo de voz (`tiny`, `base`, `small`, `medium`) |
+| `OLLAMA_MODEL` | `mistral` | Modelo de IA (`llama3`, `phi3`, etc.) |
+| `WHISPER_MODEL` | `small` | Modelo de voz (`tiny`, `base`, `small`, `medium`) |
+| `WHISPER_LANGUAGE` | `es` | Idioma forzado para transcripción |
 | `HOTKEY_ACTIVATE` | `ctrl+shift+j` | Atajo para activar JARVIS |
-| `TTS_ENABLED` | `True` | Activar/desactivar voz de JARVIS |
-| `TTS_RATE` | `1.0` | Velocidad de habla |
+| `TTS_ENABLED` | `True` | Activar/desactivar voz |
+| `PIPER_VOICE` | `es_ES-davefx-medium` | Voz TTS en español |
 | `HUD_OPACITY` | `0.95` | Transparencia de la ventana |
 
-También puedes editar `data/config.json` para cambiar preferencias de usuario.
+También puedes editar `data/config.json` para preferencias de usuario.
 
 ---
 
-## 🔧 Dependencias principales
+## 🔧 Tecnologías
 
-| Paquete | Para qué se usa |
+| Componente | Tecnología |
 |---|---|
-| `PySide6` | Interfaz gráfica (ventana HUD) |
-| `requests` | Comunicación con Ollama API local |
-| `faster-whisper` | Reconocimiento de voz (Speech-to-Text) |
-| `pyttsx3` | Síntesis de voz (Text-to-Speech) |
-| `pyautogui` | Simulación de teclado (abrir apps con Windows Search) |
-| `keyboard` | Hotkeys globales (Ctrl+Shift+J) |
-| `psutil` | Info del sistema (CPU, RAM, disco) |
-| `pycaw` + `comtypes` | Control de volumen de Windows |
-| `sounddevice` + `numpy` | Captura de audio del micrófono |
-| `PyMuPDF` | Lectura de PDFs |
-| `python-docx` | Lectura/escritura de Word |
-| `openpyxl` | Lectura/escritura de Excel |
-| `Pillow` | Capturas de pantalla |
+| LLM | Ollama + Mistral (100% local) |
+| STT | faster-whisper (modelo `small`, español forzado) |
+| TTS | Piper TTS (`es_ES-davefx-medium`) |
+| OCR | Windows.Media.Ocr nativo (Win10/11, es-ES) |
+| GUI | PySide6 (Qt for Python) |
+| Automatización | pyautogui + Win32 API via PowerShell |
+| UI Automation | System.Windows.Automation via PowerShell |
+| Base de datos | SQLite3 (stdlib) |
 
-La lista completa está en `requirements.txt`.
+---
+
+## 🚀 Roadmap — Ideas para futuras mejoras
+
+### 🔴 Prioridad alta
+
+- [ ] **Modelo de visión (multimodal)** — Integrar LLaVA u otro modelo multimodal en Ollama para que JARVIS pueda "ver" screenshots reales, no solo leer texto por OCR. Permitiría entender iconos, imágenes, colores y layout.
+- [ ] **Modo conversación continua** — Escucha activa sin necesidad de pulsar el botón del micrófono cada vez. Wake word "JARVIS" para activar, silencio para desactivar.
+- [ ] **Programación de tareas** — Comandos tipo *"recuérdame a las 5pm"*, *"en 30 minutos abre Chrome"*, *"todos los lunes a las 9 abre Outlook"*. Scheduler con persistencia.
+
+### 🟡 Prioridad media
+
+- [ ] **Sistema de plugins** — Carpeta `plugins/` donde cada archivo `.py` registre funciones nuevas automáticamente sin modificar el core. Hot-reload.
+- [ ] **Aprendizaje de correcciones** — Si el usuario dice *"no, me refería a X"*, JARVIS guarda la corrección y la aplica en el futuro.
+- [ ] **Notificaciones proactivas** — Vigilar CPU/RAM/batería/disco y avisar al límite. Toast nativo de Windows.
+- [ ] **Control multimedia avanzado** — Controlar Spotify (play, pause, skip, playlist) vía API. YouTube en el navegador.
+- [ ] **Multi-monitor** — Detectar en qué monitor buscar elementos por OCR. Acciones en monitor específico.
+- [ ] **Integración con calendario** — Sincronización con Google Calendar u Outlook para consultar eventos, crear citas.
+
+### 🟢 Prioridad baja (nice to have)
+
+- [ ] **Detección multi-idioma dinámica** — Detectar automáticamente el idioma del usuario y cambiar respuesta/transcripción.
+- [ ] **Interfaz web alternativa** — Servidor local con WebSocket para acceder desde navegador o móvil.
+- [ ] **Control de domótica** — Integración con Home Assistant, Phillips Hue, IoT local.
+- [ ] **Modo gaming** — Overlay transparente para juegos con métricas y quick commands.
+- [ ] **Exportar conversaciones** — Guardar charlas como Markdown o PDF.
+- [ ] **Temas personalizables** — Temas custom además del Arc Reactor (cian).
+- [ ] **Perfil de voz** — Ajustar velocidad, tono, elegir entre varias voces.
+- [ ] **OCR de imágenes locales** — *"Lee la imagen C:/fotos/captura.png"*.
+- [ ] **Traducción en tiempo real** — *"Traduce esto al inglés"* con portapapeles o documento.
+- [ ] **Resumen de páginas web** — *"Resume la página que tengo abierta"* con OCR + LLM.
+- [ ] **Control de Git** — *"Haz commit con mensaje 'fix'"*, *"push al repo"*.
+- [ ] **Dictado continuo** — Modo dictado donde todo se escribe en el documento activo con puntuación automática.
 
 ---
 
@@ -234,37 +296,37 @@ La lista completa está en `requirements.txt`.
 
 ### "Ollama no disponible" / LLM ❌
 
-1. Asegúrate de que Ollama está corriendo: `ollama serve`
-2. Verifica que el modelo está descargado: `ollama list`
-3. Si no aparece "mistral", descárgalo: `ollama pull mistral`
+1. Verifica que Ollama está corriendo: `ollama serve`
+2. Comprueba el modelo: `ollama list`
+3. Si falta: `ollama pull mistral`
 
 ### JARVIS no abre aplicaciones
 
-- JARVIS usa la **búsqueda de Windows** (simula Win + escribir + Enter)
-- La app debe estar instalada y aparecer en la búsqueda de Windows
-- Si una app no se abre, prueba a buscarla manualmente con la tecla Windows
+- Usa la **búsqueda de Windows** (simula Win + escribir + Enter)
+- La app debe aparecer en la búsqueda de Windows
 
-### "busca X" no abre nada en el navegador
+### No entiende bien lo que digo (STT)
 
-- JARVIS usa `webbrowser.open()` para abrir Google
-- Si no funciona, verifica que tienes un navegador predeterminado configurado en Windows
+- El modelo Whisper `small` es el equilibrio calidad/velocidad para español
+- Puedes cambiar a `medium` en `config.py` (más preciso pero más lento)
+- Asegúrate de que `WHISPER_LANGUAGE = "es"` en `config.py`
 
-### Error con pyttsx3 / No habla
+### No hace clic en lo correcto (OCR)
 
-```powershell
-pip install pyttsx3
-```
+- El OCR nativo de Windows requiere el idioma `es-ES` instalado
+- Verifica: `Configuración → Hora e idioma → Idioma y región → Español (España)`
+- Funciona mejor con texto claro y fondos limpios
 
-### Error con el micrófono / No escucha
+### Error con el micrófono
 
 ```powershell
 pip install faster-whisper sounddevice numpy
 ```
-- Asegúrate de que tu micrófono está configurado como dispositivo predeterminado en Windows
+- Configura tu micrófono como dispositivo predeterminado en Windows
 
 ### Error "keyboard requires root"
 
-- Ejecuta la terminal como **Administrador** (clic derecho → "Ejecutar como administrador")
+- Ejecuta la terminal como **Administrador**
 
 ---
 
@@ -276,7 +338,7 @@ pip install faster-whisper sounddevice numpy
 | **RAM** | 8 GB | 16 GB |
 | **Disco** | ~5 GB | ~10 GB |
 | **CPU** | x64 moderno | i5/Ryzen 5 o superior |
-| **GPU** | No necesaria | NVIDIA (CUDA) para acelerar IA |
+| **GPU** | No necesaria | NVIDIA (CUDA) para acelerar Whisper |
 
 ---
 

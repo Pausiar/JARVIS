@@ -22,6 +22,7 @@ from config import (
     WHISPER_LANGUAGE,
     WHISPER_DEVICE,
     WHISPER_COMPUTE_TYPE,
+    WHISPER_INITIAL_PROMPT,
     WAKE_WORD,
     DATA_DIR,
 )
@@ -107,11 +108,16 @@ class VoiceInput:
                 audio_data,
                 language=WHISPER_LANGUAGE,
                 beam_size=5,
+                best_of=3,
+                initial_prompt=WHISPER_INITIAL_PROMPT,
                 vad_filter=True,
                 vad_parameters=dict(
-                    min_silence_duration_ms=500,
-                    speech_pad_ms=200,
+                    min_silence_duration_ms=300,
+                    speech_pad_ms=300,
+                    threshold=0.35,
                 ),
+                condition_on_previous_text=True,
+                no_speech_threshold=0.4,
             )
 
             text = " ".join(segment.text for segment in segments).strip()
@@ -140,6 +146,8 @@ class VoiceInput:
                 file_path,
                 language=WHISPER_LANGUAGE,
                 beam_size=5,
+                best_of=3,
+                initial_prompt=WHISPER_INITIAL_PROMPT,
                 vad_filter=True,
             )
             text = " ".join(segment.text for segment in segments).strip()

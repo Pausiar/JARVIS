@@ -6,6 +6,7 @@ Conecta el cerebro (LLM) con los módulos de acción.
 
 import logging
 import re
+import time
 import datetime
 from typing import Optional
 from pathlib import Path
@@ -49,6 +50,11 @@ class Orchestrator:
             "automation": AutomationManager(),
             "memory": self.memory,
         }
+
+        # Pasar brain reference a SystemControl para features avanzados
+        sc = self.modules.get("system_control")
+        if sc and hasattr(sc, 'set_brain'):
+            sc.set_brain(self.brain)
 
         logger.info("Orchestrator inicializado con todos los módulos.")
 
@@ -152,7 +158,15 @@ class Orchestrator:
                 return response
 
         # Paso 2: Usar el LLM para entender la petición
-        context = self._build_context()
+        # Detectar si el usuario se refiere a lo que hay en pantalla
+        needs_screen = bool(re.search(
+            r"(?:qu[eé]|que)\s+(?:hay|pone|dice|se\s+ve|aparece)"
+            r"|(?:en\s+)?(?:la\s+)?pantalla"
+            r"|(?:lee|leer|dime)\s+(?:lo\s+que|qu[eé]|que)\s+(?:hay|pone|dice)"
+            r"|(?:describe|describir)\s+(?:lo\s+que|la)\s+(?:pantalla|se\s+ve)",
+            user_input, re.IGNORECASE
+        ))
+        context = self._build_context(include_screen=needs_screen)
         llm_response = self.brain.chat(user_input, context=context)
 
         # Paso 3: Extraer y ejecutar acciones del LLM
@@ -182,6 +196,20 @@ class Orchestrator:
         module_name = intent.module
         function_name = intent.function
         params = intent.params
+
+        # Manejar funciones del orchestrator (workflows multi-paso)
+        if module_name == "orchestrator":
+            if hasattr(self, function_name):
+                try:
+                    func = getattr(self, function_name)
+                    result = func(**params)
+                    logger.info(f"Workflow ejecutado: {function_name}")
+                    return str(result) if result is not None else "Acción completada."
+                except Exception as e:
+                    logger.error(f"Error en workflow {function_name}: {e}")
+                    return f"Error: {e}"
+            logger.warning(f"Workflow desconocido: {function_name}")
+            return None
 
         if module_name not in self.modules:
             logger.warning(f"Módulo desconocido: {module_name}")
@@ -215,7 +243,7 @@ class Orchestrator:
 
     # ─── Helpers ──────────────────────────────────────────────
 
-    def _build_context(self) -> str:
+    def _build_context(self, include_screen: bool = False) -> str:
         """Construye contexto adicional para el LLM."""
         context_parts = []
 
@@ -237,6 +265,21 @@ class Orchestrator:
                 "Mensajes recientes:\n"
                 + "\n".join(f"- {m['role']}: {m['content'][:100]}" for m in recent)
             )
+
+        # Contexto visual de pantalla (si se solicita)
+        if include_screen:
+            sc = self.modules.get("system_control")
+            if sc and hasattr(sc, 'get_screen_text'):
+                try:
+                    screen_text = sc.get_screen_text()
+                    if screen_text and not screen_text.startswith("No se"):
+                        if len(screen_text) > 3000:
+                            screen_text = screen_text[:3000] + "\n[... texto truncado ...]"
+                        context_parts.append(
+                            f"Texto visible en la pantalla actual:\n{screen_text}"
+                        )
+                except Exception as e:
+                    logger.warning(f"Error obteniendo contexto de pantalla: {e}")
 
         return "\n".join(context_parts)
 
@@ -270,6 +313,103 @@ class Orchestrator:
             "Ha sido un placer servirle, señor. "
             "Estaré aquí cuando me necesite. Que tenga un excelente día."
         )
+
+    # ─── Workflows multi-paso ────────────────────────────────
+
+    def solve_exercises(self, file_path: str, output_app: str = "") -> str:
+        """
+        Lee un PDF/documento con ejercicios, los resuelve con el LLM,
+        y opcionalmente escribe las respuestas en Word/Google Docs.
+
+        Args:
+            file_path: Ruta al PDF/documento con ejercicios.
+            output_app: App donde escribir las soluciones (Word, Google Docs, etc.).
+        """
+        try:
+            # 1. Leer el documento
+            dp = self.modules.get("document_processor")
+            if not dp:
+                return "Módulo de documentos no disponible."
+
+            content = dp.read_document(file_path)
+            if content.startswith(("Error", "Archivo no")):
+                return content
+
+            # 2. Truncar si es muy largo
+            if len(content) > 8000:
+                content = content[:8000] + "\n[... documento truncado ...]"
+
+            # 3. Enviar al LLM con prompt de resolución
+            solving_prompt = (
+                "A continuación tienes ejercicios de un documento. "
+                "Resuélvelos todos de forma clara y ordenada. "
+                "Para cada ejercicio:\n"
+                "- Indica el número del ejercicio\n"
+                "- Escribe la respuesta completa\n"
+                "- Si es matemática, muestra el procedimiento paso a paso\n"
+                "- Si es de programación, escribe el código completo\n"
+                "- Si es de redacción, escribe la respuesta desarrollada\n\n"
+                "EJERCICIOS:\n" + content
+            )
+
+            # Usar num_predict más alto para soluciones largas
+            solutions = self.brain.chat(
+                solving_prompt,
+                context="Resolviendo ejercicios de un documento"
+            )
+
+            if not solutions or solutions.startswith("Me temo"):
+                return "No pude resolver los ejercicios. " + (solutions or "")
+
+            # 4. Si se especifica app de salida, escribir las soluciones
+            if output_app:
+                sc = self.modules.get("system_control")
+                if sc:
+                    # Abrir la aplicación
+                    sc.open_application(output_app)
+                    time.sleep(4.0)  # Esperar a que cargue
+
+                    # Escribir soluciones
+                    sc.type_long_text(solutions)
+                    return f"Ejercicios resueltos y escritos en {output_app}."
+
+            return f"Ejercicios resueltos:\n\n{solutions}"
+
+        except Exception as e:
+            logger.error(f"Error resolviendo ejercicios: {e}")
+            return f"Error al resolver ejercicios: {e}"
+
+    def read_and_answer(self, file_path: str, question: str = "") -> str:
+        """
+        Lee un documento y responde preguntas sobre su contenido.
+
+        Args:
+            file_path: Ruta al documento.
+            question: Pregunta específica sobre el contenido.
+        """
+        try:
+            dp = self.modules.get("document_processor")
+            if not dp:
+                return "Módulo de documentos no disponible."
+
+            content = dp.read_document(file_path)
+            if content.startswith(("Error", "Archivo no")):
+                return content
+
+            if len(content) > 8000:
+                content = content[:8000] + "\n[... documento truncado ...]"
+
+            prompt = f"Contenido del documento:\n{content}\n\n"
+            if question:
+                prompt += f"Pregunta del usuario: {question}"
+            else:
+                prompt += "Resume el contenido de este documento de forma clara y concisa."
+
+            return self.brain.chat(prompt, context="Analizando documento")
+
+        except Exception as e:
+            logger.error(f"Error leyendo/respondiendo documento: {e}")
+            return f"Error: {e}"
 
     # ─── Acceso directo a módulos ─────────────────────────────
 
