@@ -1,0 +1,52 @@
+# J.A.R.V.I.S. — Dependencias del Proyecto
+# Just A Rather Very Intelligent System
+
+# ─── Core / LLM ───────────────────────────
+requests>=2.31.0
+httpx>=0.25.0
+
+# ─── Speech-to-Text (STT) ─────────────────
+faster-whisper>=1.0.0
+sounddevice>=0.4.6
+numpy>=1.24.0
+
+# ─── Text-to-Speech (TTS) ─────────────────
+piper-tts>=1.2.0
+
+# ─── Interfaz Gráfica (HUD) ───────────────
+PySide6>=6.6.0
+
+# ─── Procesamiento de Documentos ──────────
+PyMuPDF>=1.23.0
+python-docx>=1.1.0
+openpyxl>=3.1.2
+
+# ─── Control del Sistema ──────────────────
+pyautogui>=0.9.54
+psutil>=5.9.0
+pycaw>=20230407
+comtypes>=1.2.0
+screen-brightness-control>=0.22.0
+Pillow>=10.0.0
+
+# ─── Búsqueda Web ─────────────────────────
+duckduckgo-search>=4.0.0
+beautifulsoup4>=4.12.0
+
+# ─── Hotkeys / Input ──────────────────────
+keyboard>=0.13.5
+pynput>=1.7.6
+
+# ─── Seguridad / Credenciales ─────────────
+keyring>=24.0.0
+cryptography>=41.0.0
+
+# ─── Automatización / Archivos ─────────────
+watchdog>=3.0.0
+
+# ─── Base de datos ─────────────────────────
+# sqlite3 viene con Python (stdlib)
+
+# ─── Testing ──────────────────────────────
+pytest>=7.4.0
+pytest-asyncio>=0.21.0

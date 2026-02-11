@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# JARVIS data (user-specific)
+data/config.json
+data/memory.db
+data/logs/
+data/routines.json
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Models (too large for git)
+*.bin
+*.pt
+*.onnx
+
+# Temp
+*.tmp
+*.bak
