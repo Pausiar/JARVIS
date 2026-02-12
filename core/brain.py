@@ -36,44 +36,59 @@ class JarvisBrain:
         self.conversation_history: list[dict] = []
         self.max_history = 6  # Máximo de mensajes en el historial activo
         self._available = None
+        self._available_checked_at = 0  # Timestamp del último check
         self._warmed_up = False
         logger.info(f"JarvisBrain inicializado con modelo: {self.model}")
 
     def warmup(self) -> bool:
-        """Calienta el modelo con un mensaje corto para evitar el lag de primera carga."""
+        """Pre-carga el modelo en RAM sin generar texto.
+        
+        Usa el endpoint /api/generate con prompt vacío, que solo
+        carga el modelo y lo mantiene en RAM (keep_alive). No genera
+        tokens, así que es rápido y no bloquea peticiones posteriores.
+        """
         if self._warmed_up:
             return True
         try:
-            logger.info("Calentando modelo (primera carga)...")
+            logger.info("Cargando modelo en RAM...")
+            # Prompt vacío = solo cargar modelo, no generar nada
             resp = requests.post(
-                f"{self.host}/api/chat",
+                f"{self.host}/api/generate",
                 json={
                     "model": self.model,
-                    "messages": [{"role": "user", "content": "Hola"}],
-                    "stream": False,
-                    "keep_alive": "10m",
-                    "options": {"num_predict": 1},
+                    "prompt": "",
+                    "keep_alive": "15m",
                 },
-                timeout=180,  # Generoso para primera carga
+                timeout=120,
             )
             self._warmed_up = resp.status_code == 200
             if self._warmed_up:
-                logger.info("Modelo calentado y listo.")
+                logger.info("Modelo cargado en RAM y listo.")
             return self._warmed_up
         except Exception as e:
-            logger.warning(f"Error calentando modelo: {e}")
+            logger.warning(f"Error cargando modelo: {e}")
             return False
 
     # ─── Verificación de disponibilidad ───────────────────────
 
     def is_available(self) -> bool:
-        """Verifica si Ollama está corriendo y el modelo está disponible."""
+        """Verifica si Ollama está corriendo y el modelo está disponible.
+        
+        Cachea el resultado durante 30s para evitar llamadas repetidas
+        al API que podrían competir con peticiones de generación.
+        """
+        now = time.time()
+        # Si ya verificamos recientemente y estaba disponible, no re-chequear
+        if self._available and (now - self._available_checked_at) < 30:
+            return True
+
         try:
             resp = requests.get(f"{self.host}/api/tags", timeout=5)
             if resp.status_code == 200:
                 models = resp.json().get("models", [])
                 model_names = [m.get("name", "").split(":")[0] for m in models]
                 self._available = self.model in model_names
+                self._available_checked_at = now
                 if not self._available:
                     logger.warning(
                         f"Modelo '{self.model}' no encontrado. "
@@ -194,14 +209,16 @@ class JarvisBrain:
 
         messages = self._build_messages(full_message)
 
-        try:
+        max_retries = 2
+        for attempt in range(max_retries):
+          try:
             resp = requests.post(
                 f"{self.host}/api/chat",
                 json={
                     "model": self.model,
                     "messages": messages,
                     "stream": True,
-                    "keep_alive": "10m",  # Mantener modelo en RAM 10 min
+                    "keep_alive": "15m",
                     "options": {
                         "temperature": 0.7,
                         "top_p": 0.9,
@@ -209,7 +226,7 @@ class JarvisBrain:
                         "num_ctx": 2048,
                     },
                 },
-                timeout=120,  # HTTP timeout generoso para carga del modelo
+                timeout=(10, 90),  # (connect 10s, read 90s por chunk)
                 stream=True,
             )
 
@@ -220,10 +237,10 @@ class JarvisBrain:
                 # Timeouts basados en INACTIVIDAD, no en tiempo total:
                 # - 60s sin recibir ningún token (carga del modelo)
                 # - 15s sin token nuevo una vez empezó a generar
-                # - 120s máximo absoluto como red de seguridad
-                idle_timeout_initial = 60   # Esperar hasta 60s al primer token
-                idle_timeout_streaming = 15  # 15s entre tokens una vez fluye
-                max_total_seconds = 120
+                # - 90s máximo absoluto como red de seguridad
+                idle_timeout_initial = 60
+                idle_timeout_streaming = 15
+                max_total_seconds = 90
 
                 has_started = False
 
@@ -265,7 +282,11 @@ class JarvisBrain:
                 elapsed = time.time() - start_time
 
                 if not assistant_message:
-                    logger.error(f"LLM: respuesta vacía tras {elapsed:.1f}s")
+                    if attempt < max_retries - 1:
+                        logger.warning(f"LLM: respuesta vacía tras {elapsed:.1f}s, reintentando...")
+                        time.sleep(1)
+                        continue  # Reintentar
+                    logger.error(f"LLM: respuesta vacía tras {elapsed:.1f}s (sin reintentos)")
                     return "No he podido generar una respuesta, señor. Inténtelo de nuevo."
 
                 # Guardar en historial
@@ -281,29 +302,45 @@ class JarvisBrain:
             else:
                 error_msg = f"Error del LLM (HTTP {resp.status_code}): {resp.text}"
                 logger.error(error_msg)
+                if attempt < max_retries - 1:
+                    logger.info("Reintentando...")
+                    time.sleep(2)
+                    continue
                 return (
                     "Me temo que he tenido un problema técnico, señor. "
                     "No he podido procesar su solicitud."
                 )
 
-        except requests.ConnectionError:
+          except requests.ConnectionError:
             logger.error("No se puede conectar con Ollama.")
+            if attempt < max_retries - 1:
+                time.sleep(2)
+                continue
             return (
                 "Me temo que no puedo conectar con mi motor de razonamiento, señor. "
                 "¿Podría verificar que Ollama esté ejecutándose?"
             )
-        except requests.Timeout:
-            logger.error("Timeout en la conexión HTTP con Ollama.")
+          except requests.Timeout:
+            logger.warning(f"Timeout HTTP con Ollama (intento {attempt+1}/{max_retries})")
+            if attempt < max_retries - 1:
+                time.sleep(2)
+                continue
             return (
-                "La conexión con Ollama ha tardado demasiado, señor. "
-                "El modelo puede estar cargándose. Intente de nuevo en unos segundos."
+                "La respuesta está tardando demasiado, señor. "
+                "Intente de nuevo con una pregunta más corta."
             )
-        except Exception as e:
+          except Exception as e:
             logger.error(f"Error inesperado en chat: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(1)
+                continue
             return (
                 f"Me temo que algo inesperado ha ocurrido, señor. "
                 f"Error: {str(e)}"
             )
+
+        # Should not reach here but just in case
+        return "No he podido conectar con el modelo, señor."
 
     def chat_stream(self, user_message: str, context: str = "") -> Generator[str, None, None]:
         """
