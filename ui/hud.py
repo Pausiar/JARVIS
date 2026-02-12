@@ -141,8 +141,8 @@ class JarvisHUD(QMainWindow):
         self.chat_container.setObjectName("chatArea")
         self.chat_layout = QVBoxLayout(self.chat_container)
         self.chat_layout.setContentsMargins(8, 8, 8, 8)
-        self.chat_layout.setSpacing(8)
-        self.chat_layout.addStretch()
+        self.chat_layout.setSpacing(4)
+        self.chat_layout.setAlignment(Qt.AlignTop)
 
         self.chat_scroll.setWidget(self.chat_container)
         main_layout.addWidget(self.chat_scroll, 1)
@@ -391,14 +391,13 @@ class JarvisHUD(QMainWindow):
     def _add_user_message(self, text: str):
         """Agrega un mensaje del usuario al chat."""
         bubble = MessageBubble(text, is_user=True)
-        # Insertar antes del stretch
-        self.chat_layout.insertWidget(self.chat_layout.count() - 1, bubble)
+        self.chat_layout.addWidget(bubble)
         self._scroll_to_bottom()
 
     def _add_assistant_message(self, text: str):
         """Agrega un mensaje de JARVIS al chat."""
         bubble = MessageBubble(text, is_user=False)
-        self.chat_layout.insertWidget(self.chat_layout.count() - 1, bubble)
+        self.chat_layout.addWidget(bubble)
         self._scroll_to_bottom()
 
     def add_message(self, text: str, is_user: bool = False):

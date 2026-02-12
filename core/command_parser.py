@@ -619,10 +619,10 @@ class CommandParser:
 
         # ─── Vision / Análisis de pantalla con IA ─────────────
         patterns.extend([
-            # "describe la pantalla", "qué ves en la pantalla"
+            # "analiza la pantalla" → vision IA (LLaVA), NO coincide con "describe"
             (
                 re.compile(
-                    r"(?:describe|describir|analiza|analizar)\s+(?:la\s+)?pantalla"
+                    r"(?:analiza|analizar)\s+(?:la\s+)?pantalla"
                     r"(?:\s+(?:del\s+)?monitor\s+(\d+))?",
                     re.IGNORECASE,
                 ),
@@ -674,7 +674,25 @@ class CommandParser:
 
         # ─── Control multimedia ───────────────────────────────
         patterns.extend([
-            # Play/Pause
+            # ─── YouTube (específico, ANTES de genérico) ──
+            # Pausa YouTube / video
+            (
+                re.compile(
+                    r"(?:pausa|pausar|pause|para|parar)\s+(?:el\s+)?(?:youtube|v[ií]deo|video)",
+                    re.IGNORECASE,
+                ),
+                "media_control", "youtube_play_pause", lambda m: {},
+            ),
+            # YouTube fullscreen
+            (
+                re.compile(
+                    r"(?:pon|poner|activa|activar)\s+(?:pantalla\s+completa|fullscreen)\s+"
+                    r"(?:en\s+)?(?:el\s+)?(?:youtube|v[ií]deo|video)",
+                    re.IGNORECASE,
+                ),
+                "media_control", "youtube_fullscreen", lambda m: {},
+            ),
+            # ─── Play/Pause genérico ──
             (
                 re.compile(
                     r"(?:reproduce|reproducir|play|reanuda|reanudar)\s+(?:la\s+)?(?:m[uú]sica|canci[oó]n|audio|media)?",
@@ -746,23 +764,6 @@ class CommandParser:
                 ),
                 "media_control", "mute_app",
                 lambda m: {"app_name": m.group(1).strip()},
-            ),
-            # Pausa YouTube
-            (
-                re.compile(
-                    r"(?:pausa|pausar|pause|para|parar)\s+(?:el\s+)?(?:youtube|v[ií]deo|video)",
-                    re.IGNORECASE,
-                ),
-                "media_control", "youtube_play_pause", lambda m: {},
-            ),
-            # YouTube fullscreen
-            (
-                re.compile(
-                    r"(?:pon|poner|activa|activar)\s+(?:pantalla\s+completa|fullscreen)\s+"
-                    r"(?:en\s+)?(?:el\s+)?(?:youtube|v[ií]deo|video)",
-                    re.IGNORECASE,
-                ),
-                "media_control", "youtube_fullscreen", lambda m: {},
             ),
         ])
 

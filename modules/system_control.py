@@ -167,17 +167,23 @@ class SystemControl:
 
     # ─── Volumen ──────────────────────────────────────────────
 
+    def _get_volume_interface(self):
+        """Obtiene la interfaz de volumen del sistema (compatible con pycaw nuevo y viejo)."""
+        from pycaw.pycaw import AudioUtilities
+        devices = AudioUtilities.GetSpeakers()
+        # pycaw >= 2024: AudioDevice wrapper con .EndpointVolume
+        if hasattr(devices, 'EndpointVolume'):
+            return devices.EndpointVolume
+        # pycaw antiguo: .Activate()
+        from pycaw.pycaw import IAudioEndpointVolume
+        from comtypes import CLSCTX_ALL
+        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        return interface.QueryInterface(IAudioEndpointVolume)
+
     def volume_up(self, amount: int = 10) -> str:
         """Sube el volumen del sistema."""
         try:
-            from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-            from comtypes import CLSCTX_ALL
-
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(
-                IAudioEndpointVolume._iid_, CLSCTX_ALL, None
-            )
-            volume = interface.QueryInterface(IAudioEndpointVolume)
+            volume = self._get_volume_interface()
 
             current = volume.GetMasterVolumeLevelScalar()
             new_level = min(1.0, current + amount / 100.0)
@@ -200,14 +206,7 @@ class SystemControl:
     def volume_down(self, amount: int = 10) -> str:
         """Baja el volumen del sistema."""
         try:
-            from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-            from comtypes import CLSCTX_ALL
-
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(
-                IAudioEndpointVolume._iid_, CLSCTX_ALL, None
-            )
-            volume = interface.QueryInterface(IAudioEndpointVolume)
+            volume = self._get_volume_interface()
 
             current = volume.GetMasterVolumeLevelScalar()
             new_level = max(0.0, current - amount / 100.0)
@@ -229,14 +228,7 @@ class SystemControl:
     def set_volume(self, level: int) -> str:
         """Establece el volumen a un nivel específico (0-100)."""
         try:
-            from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-            from comtypes import CLSCTX_ALL
-
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(
-                IAudioEndpointVolume._iid_, CLSCTX_ALL, None
-            )
-            volume = interface.QueryInterface(IAudioEndpointVolume)
+            volume = self._get_volume_interface()
 
             level_scalar = max(0.0, min(1.0, level / 100.0))
             volume.SetMasterVolumeLevelScalar(level_scalar, None)
@@ -249,14 +241,7 @@ class SystemControl:
     def mute(self) -> str:
         """Silencia o activa el sonido del sistema."""
         try:
-            from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-            from comtypes import CLSCTX_ALL
-
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(
-                IAudioEndpointVolume._iid_, CLSCTX_ALL, None
-            )
-            volume = interface.QueryInterface(IAudioEndpointVolume)
+            volume = self._get_volume_interface()
 
             is_muted = volume.GetMute()
             volume.SetMute(not is_muted, None)
@@ -273,14 +258,7 @@ class SystemControl:
     def get_volume(self) -> int:
         """Obtiene el nivel de volumen actual."""
         try:
-            from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-            from comtypes import CLSCTX_ALL
-
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(
-                IAudioEndpointVolume._iid_, CLSCTX_ALL, None
-            )
-            volume = interface.QueryInterface(IAudioEndpointVolume)
+            volume = self._get_volume_interface()
             return int(volume.GetMasterVolumeLevelScalar() * 100)
         except Exception:
             return -1
@@ -655,11 +633,11 @@ class SystemControl:
             [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
             [Windows.Graphics.Imaging.SoftwareBitmap, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
             [Windows.Graphics.Imaging.BitmapDecoder, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
-            [Windows.Storage.Streams.RandomAccessStream, Windows.Storage.Streams, ContentType=WindowsRuntime] | Out-Null
+            [Windows.Storage.StorageFile, Windows.Storage, ContentType=WindowsRuntime] | Out-Null
 
             # Abrir imagen
-            $file = [System.IO.File]::OpenRead("{temp_path.replace(chr(92), '/')}")
-            $stream = [Windows.Storage.Streams.RandomAccessStream]::FromStream($file)
+            $storagefile = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync("{temp_path.replace(chr(92), '/')}")) ([Windows.Storage.StorageFile])
+            $stream = Await ($storagefile.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
             $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
             $bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
 
@@ -700,7 +678,7 @@ class SystemControl:
                         $avgX = [int](($allWords | Measure-Object -Property X -Average).Average)
                         $avgY = [int](($allWords | Measure-Object -Property Y -Average).Average)
                         Write-Output "FOUND:$avgX,$avgY"
-                        $file.Close()
+                        $stream.Dispose()
                         exit
                     }}
                 }}
@@ -731,12 +709,12 @@ class SystemControl:
             }} else {{
                 Write-Output "NOT_FOUND"
             }}
-            $file.Close()
+            $stream.Dispose()
             '''
 
             result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-                capture_output=True, text=True, timeout=15
+                capture_output=True, text=True, timeout=30
             )
 
             output = result.stdout.strip()
@@ -818,10 +796,10 @@ class SystemControl:
             [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
             [Windows.Graphics.Imaging.SoftwareBitmap, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
             [Windows.Graphics.Imaging.BitmapDecoder, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
-            [Windows.Storage.Streams.RandomAccessStream, Windows.Storage.Streams, ContentType=WindowsRuntime] | Out-Null
+            [Windows.Storage.StorageFile, Windows.Storage, ContentType=WindowsRuntime] | Out-Null
 
-            $file = [System.IO.File]::OpenRead("{temp_path.replace(chr(92), '/')}")
-            $stream = [Windows.Storage.Streams.RandomAccessStream]::FromStream($file)
+            $storagefile = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync("{temp_path.replace(chr(92), '/')}")) ([Windows.Storage.StorageFile])
+            $stream = Await ($storagefile.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
             $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
             $bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
 
@@ -856,12 +834,12 @@ class SystemControl:
                     Write-Output "LINE:$cy|$cx|$w|$h|$($line.Text)"
                 }}
             }}
-            $file.Close()
+            $stream.Dispose()
             '''
 
             result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-                capture_output=True, text=True, timeout=15
+                capture_output=True, text=True, timeout=30
             )
 
             lines = []
