@@ -262,18 +262,18 @@ También puedes editar `data/config.json` para preferencias de usuario.
 
 ### 🔴 Prioridad alta
 
-- [ ] **Modelo de visión (multimodal)** — Integrar LLaVA u otro modelo multimodal en Ollama para que JARVIS pueda "ver" screenshots reales, no solo leer texto por OCR. Permitiría entender iconos, imágenes, colores y layout.
-- [ ] **Modo conversación continua** — Escucha activa sin necesidad de pulsar el botón del micrófono cada vez. Wake word "JARVIS" para activar, silencio para desactivar.
-- [ ] **Programación de tareas** — Comandos tipo *"recuérdame a las 5pm"*, *"en 30 minutos abre Chrome"*, *"todos los lunes a las 9 abre Outlook"*. Scheduler con persistencia.
+- [x] **Modelo de visión (multimodal)** — LLaVA integrado via Ollama. JARVIS puede analizar screenshots, describir la pantalla, buscar elementos visuales y leer texto de imágenes locales.
+- [x] **Modo conversación continua** — Escucha activa sin necesidad de pulsar el botón del micrófono cada vez. Wake word "JARVIS" para activar, detección de silencio automática.
+- [x] **Programación de tareas / Calendario** — Calendario local con SQLite, recordatorios automáticos. Comandos tipo *"recuérdame en 30 minutos"*, *"crea evento reunión mañana a las 15"*, *"eventos de hoy"*.
 
 ### 🟡 Prioridad media
 
-- [ ] **Sistema de plugins** — Carpeta `plugins/` donde cada archivo `.py` registre funciones nuevas automáticamente sin modificar el core. Hot-reload.
-- [ ] **Aprendizaje de correcciones** — Si el usuario dice *"no, me refería a X"*, JARVIS guarda la corrección y la aplica en el futuro.
-- [ ] **Notificaciones proactivas** — Vigilar CPU/RAM/batería/disco y avisar al límite. Toast nativo de Windows.
-- [ ] **Control multimedia avanzado** — Controlar Spotify (play, pause, skip, playlist) vía API. YouTube en el navegador.
-- [ ] **Multi-monitor** — Detectar en qué monitor buscar elementos por OCR. Acciones en monitor específico.
-- [ ] **Integración con calendario** — Sincronización con Google Calendar u Outlook para consultar eventos, crear citas.
+- [x] **Sistema de plugins** — Carpeta `plugins/` con carga automática, hot-reload por watchdog, ejemplo auto-generado. Cada plugin registra funciones sin tocar el core.
+- [x] **Aprendizaje de correcciones** — Si el usuario dice *"no, me refería a X"*, JARVIS guarda la corrección en SQLite y la aplica en el futuro. Tabla `corrections` con conteo de frecuencia.
+- [x] **Notificaciones proactivas** — Vigila CPU/RAM/batería/disco en background. Toast nativo de Windows via PowerShell WinRT. Cooldown anti-spam configurable.
+- [x] **Control multimedia avanzado** — Media keys globales (play/pause/next/prev), detección de Spotify (now playing), controles de YouTube en navegador, volumen per-app via pycaw.
+- [x] **Multi-monitor** — OCR soporta captura por monitor individual (screeninfo). Vision engine también soporta monitor específico.
+- [x] **Integración con calendario** — Calendario local SQLite con eventos, recordatorios automáticos, búsqueda y parseo de fechas en lenguaje natural.
 
 ### 🟢 Prioridad baja (nice to have)
 

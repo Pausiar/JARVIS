@@ -25,6 +25,9 @@ from config import (
     WHISPER_INITIAL_PROMPT,
     WAKE_WORD,
     DATA_DIR,
+    CONTINUOUS_LISTENING,
+    CONTINUOUS_SILENCE_TIMEOUT,
+    CONTINUOUS_ENERGY_THRESHOLD,
 )
 
 logger = logging.getLogger("jarvis.voice_input")
@@ -313,6 +316,109 @@ class VoiceInput:
         except Exception as e:
             logger.error(f"Error en wake word loop: {e}")
             self.is_listening = False
+
+    # ─── Escucha continua (conversación) ────────────────────
+
+    def start_continuous_listening(self, on_text: Callable[[str], None]) -> None:
+        """
+        Modo conversación continua: tras detectar wake word, sigue
+        escuchando sin necesidad de volver a decir la wake word.
+        Detecta silencio para separar frases.
+
+        Args:
+            on_text: Callback invocado con cada frase transcrita.
+        """
+        if self.is_listening:
+            return
+
+        self.is_listening = True
+        self._stop_event.clear()
+
+        self._listen_thread = threading.Thread(
+            target=self._continuous_listen_loop,
+            args=(on_text,),
+            daemon=True,
+        )
+        self._listen_thread.start()
+        logger.info("Escucha continua activada.")
+
+    def _continuous_listen_loop(self, on_text: Callable[[str], None]) -> None:
+        """Bucle de escucha continua con detección de silencio."""
+        try:
+            import sounddevice as sd
+
+            chunk_duration = 0.1  # 100ms
+            chunk_size = int(self.sample_rate * chunk_duration)
+            silence_threshold = CONTINUOUS_ENERGY_THRESHOLD
+            silence_timeout = CONTINUOUS_SILENCE_TIMEOUT
+
+            audio_chunks: list[np.ndarray] = []
+            is_speaking = False
+            silence_counter = 0.0
+            max_silence_chunks = silence_timeout / chunk_duration
+
+            def audio_callback(indata, frames, time_info, status):
+                nonlocal audio_chunks, is_speaking, silence_counter
+                if self._stop_event.is_set():
+                    return
+
+                chunk = indata[:, 0].copy()
+                energy = np.sqrt(np.mean(chunk ** 2))
+
+                if energy > silence_threshold:
+                    # Voz detectada
+                    is_speaking = True
+                    silence_counter = 0.0
+                    audio_chunks.append(chunk)
+                elif is_speaking:
+                    # Silencio durante habla — acumular
+                    silence_counter += 1
+                    audio_chunks.append(chunk)
+
+                    if silence_counter >= max_silence_chunks:
+                        # Fin de frase — transcribir
+                        if audio_chunks:
+                            audio_data = np.concatenate(audio_chunks)
+                            audio_chunks.clear()
+                            is_speaking = False
+                            silence_counter = 0.0
+
+                            # Transcribir en hilo separado para no bloquear audio
+                            threading.Thread(
+                                target=self._transcribe_and_callback,
+                                args=(audio_data, on_text),
+                                daemon=True,
+                            ).start()
+
+            with sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=self.channels,
+                dtype="float32",
+                blocksize=chunk_size,
+                callback=audio_callback,
+            ):
+                logger.info("Escucha continua: esperando voz...")
+                while not self._stop_event.is_set():
+                    self._stop_event.wait(timeout=0.5)
+
+        except ImportError:
+            logger.error("sounddevice no instalado para escucha continua.")
+        except Exception as e:
+            logger.error(f"Error en escucha continua: {e}")
+        finally:
+            self.is_listening = False
+
+    def _transcribe_and_callback(
+        self, audio_data: np.ndarray, callback: Callable[[str], None]
+    ) -> None:
+        """Transcribe audio y llama al callback con el texto."""
+        try:
+            text = self.transcribe_audio(audio_data)
+            if text and len(text.strip()) > 1:
+                logger.info(f"Escucha continua transcripción: '{text}'")
+                callback(text.strip())
+        except Exception as e:
+            logger.error(f"Error en transcripción continua: {e}")
 
     # ─── Utilidades ───────────────────────────────────────────
 

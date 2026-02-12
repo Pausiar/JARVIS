@@ -24,6 +24,11 @@ from modules.email_manager import EmailManager
 from modules.code_executor import CodeExecutor
 from modules.automation import AutomationManager
 from modules.memory import Memory
+from modules.vision import VisionEngine
+from modules.media_control import MediaControl
+from modules.notifications import NotificationManager
+from modules.calendar_manager import CalendarManager
+from modules.plugin_loader import PluginLoader
 
 logger = logging.getLogger("jarvis.orchestrator")
 
@@ -49,12 +54,50 @@ class Orchestrator:
             "code_executor": CodeExecutor(),
             "automation": AutomationManager(),
             "memory": self.memory,
+            "vision": VisionEngine(),
+            "media_control": MediaControl(),
+            "notifications": NotificationManager(),
+            "calendar": CalendarManager(),
         }
+
+        # Plugin loader
+        self.plugin_loader = PluginLoader()
+        try:
+            loaded = self.plugin_loader.load_all()
+            if loaded:
+                logger.info(f"Plugins cargados: {loaded}")
+            from config import PLUGINS_HOT_RELOAD
+            if PLUGINS_HOT_RELOAD:
+                self.plugin_loader.start_watching()
+        except Exception as e:
+            logger.warning(f"Error cargando plugins: {e}")
 
         # Pasar brain reference a SystemControl para features avanzados
         sc = self.modules.get("system_control")
         if sc and hasattr(sc, 'set_brain'):
             sc.set_brain(self.brain)
+
+        # Iniciar notificaciones proactivas
+        try:
+            from config import NOTIFICATIONS_ENABLED
+            if NOTIFICATIONS_ENABLED:
+                notif = self.modules.get("notifications")
+                if notif:
+                    notif.start()
+        except Exception as e:
+            logger.warning(f"Error iniciando notificaciones: {e}")
+
+        # Iniciar recordatorios del calendario
+        try:
+            cal = self.modules.get("calendar")
+            if cal:
+                cal.start_reminders()
+        except Exception as e:
+            logger.warning(f"Error iniciando recordatorios: {e}")
+
+        # Último input para aprendizaje de correcciones
+        self._last_user_input = ""
+        self._last_action = ""
 
         logger.info("Orchestrator inicializado con todos los módulos.")
 
@@ -85,6 +128,15 @@ class Orchestrator:
 
         # Guardar en memoria
         self.memory.save_message("user", user_input)
+
+        # Comprobar si es una corrección ("no, me refería a X")
+        correction_result = self._check_correction(user_input)
+        if correction_result:
+            self.memory.save_message("assistant", correction_result)
+            return correction_result
+
+        # Guardar para posible corrección futura
+        self._last_user_input = user_input
 
         # Verificar saludos / despedidas
         if self.parser.is_greeting(user_input):
@@ -229,6 +281,8 @@ class Orchestrator:
             logger.info(
                 f"Acción ejecutada: {module_name}.{function_name} → {str(result)[:200]}"
             )
+            # Guardar última acción para correcciones
+            self._last_action = f"{module_name}.{function_name}"
             return str(result) if result is not None else "Acción completada."
         except TypeError as e:
             logger.error(
@@ -240,6 +294,32 @@ class Orchestrator:
                 f"Error ejecutando {module_name}.{function_name}: {e}"
             )
             return f"Error ejecutando la acción: {e}"
+
+    # ─── Correcciones / aprendizaje ─────────────────────────
+
+    def _check_correction(self, user_input: str) -> Optional[str]:
+        """Detecta si el usuario está corrigiendo la acción anterior."""
+        correction_match = re.match(
+            r"(?:no,?\s*)?(?:me\s+refer[ií]a\s+a|quer[ií]a\s+decir|"
+            r"no\s+(?:era\s+)?eso,?\s*(?:sino|quiero)|"
+            r"eso\s+no,?\s*(?:quiero|pon|haz))\s+(.+)",
+            user_input, re.IGNORECASE,
+        )
+        if correction_match and self._last_user_input and self._last_action:
+            correct_action = correction_match.group(1).strip()
+            self.memory.save_correction(
+                self._last_user_input,
+                self._last_action,
+                correct_action,
+            )
+            logger.info(
+                f"Corrección guardada: '{self._last_user_input}' → '{correct_action}'"
+            )
+            # Re-procesar con la acción corregida
+            self._last_user_input = None
+            self._last_action = None
+            return self.process(correct_action)
+        return None
 
     # ─── Helpers ──────────────────────────────────────────────
 
@@ -412,6 +492,46 @@ class Orchestrator:
             return f"Error: {e}"
 
     # ─── Acceso directo a módulos ─────────────────────────────
+
+    def list_plugins(self) -> str:
+        """Lista los plugins cargados."""
+        if not hasattr(self, 'plugin_loader') or not self.plugin_loader:
+            return "El sistema de plugins no está disponible."
+        plugins = self.plugin_loader.get_all_plugins()
+        if not plugins:
+            return "No hay plugins cargados."
+        lines = ["Plugins cargados:"]
+        for p in plugins:
+            lines.append(f"  • {p.name} v{p.version} — {p.description}")
+        return "\n".join(lines)
+
+    def reload_plugins(self) -> str:
+        """Recarga todos los plugins."""
+        if not hasattr(self, 'plugin_loader') or not self.plugin_loader:
+            return "El sistema de plugins no está disponible."
+        self.plugin_loader.reload_all()
+        count = len(self.plugin_loader.get_all_plugins())
+        return f"Plugins recargados. {count} plugin(s) activos."
+
+    def toggle_notifications(self, enabled: bool = True) -> str:
+        """Activa o desactiva las notificaciones proactivas."""
+        notif = self.modules.get("notifications")
+        if not notif:
+            return "El módulo de notificaciones no está disponible."
+        if enabled:
+            notif.start()
+            return "Notificaciones proactivas activadas."
+        else:
+            notif.stop()
+            return "Notificaciones proactivas desactivadas."
+
+    def toggle_continuous_listening(self, enabled: bool = True) -> str:
+        """Activa o desactiva la escucha continua."""
+        from config import CONTINUOUS_LISTENING
+        import config
+        config.CONTINUOUS_LISTENING = enabled
+        status = "activada" if enabled else "desactivada"
+        return f"Escucha continua {status}."
 
     def get_module(self, name: str):
         """Obtiene un módulo por nombre."""

@@ -28,6 +28,7 @@ pycaw>=20230407
 comtypes>=1.2.0
 screen-brightness-control>=0.22.0
 Pillow>=10.0.0
+screeninfo>=0.8.0
 
 # ─── Búsqueda Web ─────────────────────────
 duckduckgo-search>=4.0.0

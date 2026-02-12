@@ -197,6 +197,18 @@ def main():
         if automation:
             automation.cleanup()
 
+        # Limpiar nuevos módulos
+        notifications = orchestrator.get_module("notifications")
+        if notifications and hasattr(notifications, 'stop'):
+            notifications.stop()
+
+        calendar = orchestrator.get_module("calendar")
+        if calendar and hasattr(calendar, 'stop_reminders'):
+            calendar.stop_reminders()
+
+        if hasattr(orchestrator, 'plugin_loader') and orchestrator.plugin_loader:
+            orchestrator.plugin_loader.cleanup()
+
         logger.info("JARVIS cerrado correctamente. Hasta pronto, señor.")
         sys.exit(exit_code)
 

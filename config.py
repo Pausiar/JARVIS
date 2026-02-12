@@ -40,6 +40,10 @@ logging.basicConfig(
 OLLAMA_HOST = "http://localhost:11434"
 OLLAMA_MODEL = "mistral"  # Opciones: mistral, llama3, phi3
 
+# ─── Modelo de Visión Multimodal ─────────────────────────────
+VISION_MODEL = "llava"  # Opciones: llava, llava:13b, bakllava, llava-phi3
+VISION_ENABLED = True
+
 # ─── System Prompt — Personalidad de JARVIS ──────────────────
 JARVIS_SYSTEM_PROMPT = """Eres J.A.R.V.I.S., asistente IA personal. Personalidad inspirada en el JARVIS de Iron Man.
 
@@ -55,8 +59,14 @@ CAPACIDADES:
 - Resolución de ejercicios de PDFs/documentos
 - Interacción visual: clic en elementos descritos por el usuario
 - Lectura de pantalla (OCR) para entender qué hay visible
+- Visión multimodal: analizar screenshots completos con IA (LLaVA)
 - Gestión de portapapeles (leer/copiar)
 - Control de pestañas y ventanas (abrir, cerrar, cambiar, enfocar)
+- Control multimedia: play/pause, siguiente, anterior, Spotify, YouTube
+- Calendario y recordatorios: crear eventos, programar alertas
+- Notificaciones proactivas: alertas de CPU, RAM, batería, disco
+- Sistema de plugins: funciones ampliables por el usuario
+- Aprendizaje de correcciones: recuerda errores y mejora
 
 REGLAS:
 - Sé breve e informativo. No des explicaciones largas.
@@ -104,6 +114,26 @@ WAKE_WORD = "jarvis"
 HOTKEY_ACTIVATE = "ctrl+shift+j"
 HOTKEY_MUTE = "ctrl+shift+m"
 
+# ─── Conversación Continua ───────────────────────────────────
+CONTINUOUS_LISTENING = False  # Escucha continua con wake word
+CONTINUOUS_SILENCE_TIMEOUT = 2.0  # Segundos de silencio para cortar grabación
+CONTINUOUS_ENERGY_THRESHOLD = 0.02  # Umbral de energía de audio para voz
+
+# ─── Notificaciones Proactivas ───────────────────────────────
+NOTIFICATIONS_ENABLED = True
+NOTIFY_CPU_THRESHOLD = 90
+NOTIFY_RAM_THRESHOLD = 85
+NOTIFY_DISK_THRESHOLD = 90
+NOTIFY_BATTERY_LOW = 15
+NOTIFY_CHECK_INTERVAL = 60  # segundos
+
+# ─── Plugins ─────────────────────────────────────────────────
+PLUGINS_ENABLED = True
+PLUGINS_HOT_RELOAD = True  # Recargar plugins automáticamente al modificar
+
+# ─── Calendario ──────────────────────────────────────────────
+CALENDAR_REMINDER_MINUTES = 15  # Minutos antes del evento para recordar
+
 # ─── Correo Electrónico ──────────────────────────────────────
 EMAIL_SMTP_SERVER = "smtp.gmail.com"
 EMAIL_SMTP_PORT = 587
@@ -131,12 +161,19 @@ DEFAULT_CONFIG = {
     "user_name": "Señor",
     "language": "es",
     "ollama_model": OLLAMA_MODEL,
+    "vision_model": VISION_MODEL,
+    "vision_enabled": VISION_ENABLED,
     "whisper_model": WHISPER_MODEL,
     "tts_enabled": TTS_ENABLED,
     "hud_always_on_top": HUD_ALWAYS_ON_TOP,
     "hud_opacity": HUD_OPACITY,
     "wake_word": WAKE_WORD,
     "hotkey_activate": HOTKEY_ACTIVATE,
+    "continuous_listening": CONTINUOUS_LISTENING,
+    "notifications_enabled": NOTIFICATIONS_ENABLED,
+    "plugins_enabled": PLUGINS_ENABLED,
+    "plugins_hot_reload": PLUGINS_HOT_RELOAD,
+    "calendar_reminder_minutes": CALENDAR_REMINDER_MINUTES,
     "email_smtp_server": EMAIL_SMTP_SERVER,
     "email_smtp_port": EMAIL_SMTP_PORT,
     "favorite_apps": [],

@@ -75,6 +75,19 @@ class Memory:
                     )
                 """)
 
+                # Tabla de correcciones del usuario (aprendizaje)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS corrections (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_input TEXT NOT NULL,
+                        wrong_action TEXT,
+                        correct_action TEXT NOT NULL,
+                        category TEXT DEFAULT 'general',
+                        times_applied INTEGER DEFAULT 0,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+
                 conn.commit()
                 logger.info("Base de datos inicializada.")
 
@@ -260,6 +273,108 @@ class Memory:
         if results:
             return "\n".join(results)
         return f"No encontré nada relacionado con '{query}' en mi memoria, señor."
+
+    # ─── Correcciones / Aprendizaje ──────────────────────────
+
+    def save_correction(
+        self,
+        user_input: str,
+        wrong_action: str,
+        correct_action: str,
+        category: str = "general",
+    ) -> None:
+        """
+        Guarda una corrección del usuario para aprender del error.
+        Ej: usuario dijo "abre google" y JARVIS buscó en Google,
+        pero el usuario quería abrir la app Google Chrome.
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                # Comprobar si ya existe una corrección similar
+                cursor = conn.execute(
+                    "SELECT id, times_applied FROM corrections "
+                    "WHERE user_input LIKE ? AND correct_action = ?",
+                    (f"%{user_input}%", correct_action),
+                )
+                row = cursor.fetchone()
+                if row:
+                    conn.execute(
+                        "UPDATE corrections SET times_applied = times_applied + 1 "
+                        "WHERE id = ?",
+                        (row[0],),
+                    )
+                else:
+                    conn.execute(
+                        "INSERT INTO corrections "
+                        "(user_input, wrong_action, correct_action, category) "
+                        "VALUES (?, ?, ?, ?)",
+                        (user_input, wrong_action, correct_action, category),
+                    )
+            logger.info(f"Corrección guardada: '{user_input}' → '{correct_action}'")
+        except Exception as e:
+            logger.error(f"Error guardando corrección: {e}")
+
+    def get_corrections(self, user_input: str, limit: int = 5) -> list[dict]:
+        """
+        Busca correcciones previas relevantes para un input del usuario.
+        Devuelve las correcciones más relevantes ordenadas por frecuencia.
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                # Buscar correcciones que coincidan con el input
+                cursor = conn.execute(
+                    "SELECT user_input, wrong_action, correct_action, "
+                    "times_applied FROM corrections "
+                    "WHERE user_input LIKE ? "
+                    "ORDER BY times_applied DESC LIMIT ?",
+                    (f"%{user_input}%", limit),
+                )
+                return [
+                    {
+                        "user_input": r[0],
+                        "wrong_action": r[1],
+                        "correct_action": r[2],
+                        "times_applied": r[3],
+                    }
+                    for r in cursor.fetchall()
+                ]
+        except Exception as e:
+            logger.error(f"Error buscando correcciones: {e}")
+            return []
+
+    def get_all_corrections(self) -> str:
+        """Muestra todas las correcciones guardadas."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT user_input, wrong_action, correct_action, "
+                    "times_applied, created_at FROM corrections "
+                    "ORDER BY times_applied DESC"
+                )
+                rows = cursor.fetchall()
+
+            if not rows:
+                return "No hay correcciones guardadas, señor."
+
+            lines = ["📝 Correcciones aprendidas:\n"]
+            for inp, wrong, correct, count, ts in rows:
+                lines.append(
+                    f"  • \"{inp}\" → {correct} "
+                    f"(aplicada {count}x)"
+                )
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Error: {e}"
+
+    def clear_corrections(self) -> str:
+        """Elimina todas las correcciones."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("DELETE FROM corrections")
+                conn.commit()
+            return "Correcciones eliminadas."
+        except Exception as e:
+            return f"Error: {e}"
 
     # ─── Archivos procesados ──────────────────────────────────
 

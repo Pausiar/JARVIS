@@ -768,16 +768,36 @@ class SystemControl:
 
         return None
 
-    def _ocr_screen_lines(self) -> list[dict]:
+    def _ocr_screen_lines(self, monitor: int = None) -> list[dict]:
         """
         Captura la pantalla y devuelve TODAS las líneas de texto detectadas por OCR.
         Usa Windows.Media.Ocr (nativo Win10/11).
+
+        Args:
+            monitor: Índice del monitor (0-based). None = pantalla principal completa.
+
         Returns: Lista de {"text": str, "x": int, "y": int, "width": int, "height": int}
         """
         import pyautogui
         temp_path = os.path.join(tempfile.gettempdir(), "jarvis_ocr_lines.png")
+        offset_x, offset_y = 0, 0
         try:
-            screenshot = pyautogui.screenshot()
+            if monitor is not None:
+                try:
+                    from screeninfo import get_monitors
+                    monitors = get_monitors()
+                    if 0 <= monitor < len(monitors):
+                        m = monitors[monitor]
+                        offset_x, offset_y = m.x, m.y
+                        screenshot = pyautogui.screenshot(region=(m.x, m.y, m.width, m.height))
+                    else:
+                        logger.warning(f"Monitor {monitor} no existe, usando pantalla principal")
+                        screenshot = pyautogui.screenshot()
+                except ImportError:
+                    logger.warning("screeninfo no disponible, usando pantalla principal")
+                    screenshot = pyautogui.screenshot()
+            else:
+                screenshot = pyautogui.screenshot()
             screenshot.save(temp_path)
 
             ps_script = f'''
@@ -851,8 +871,8 @@ class SystemControl:
                     parts = raw_line[5:].split('|', 4)
                     if len(parts) >= 5:
                         lines.append({
-                            "y": int(parts[0]),
-                            "x": int(parts[1]),
+                            "y": int(parts[0]) + offset_y,
+                            "x": int(parts[1]) + offset_x,
                             "width": int(parts[2]),
                             "height": int(parts[3]),
                             "text": parts[4],

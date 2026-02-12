@@ -617,6 +617,306 @@ class CommandParser:
             ),
         ])
 
+        # ─── Vision / Análisis de pantalla con IA ─────────────
+        patterns.extend([
+            # "describe la pantalla", "qué ves en la pantalla"
+            (
+                re.compile(
+                    r"(?:describe|describir|analiza|analizar)\s+(?:la\s+)?pantalla"
+                    r"(?:\s+(?:del\s+)?monitor\s+(\d+))?",
+                    re.IGNORECASE,
+                ),
+                "vision", "describe_screen",
+                lambda m: {"monitor": int(m.group(1)) - 1 if m.group(1) else 0},
+            ),
+            (
+                re.compile(
+                    r"(?:qu[eé]|que)\s+(?:ves|observas|detectas)\s+"
+                    r"(?:en\s+)?(?:la\s+)?(?:pantalla|screen)"
+                    r"(?:\s+(?:del\s+)?monitor\s+(\d+))?",
+                    re.IGNORECASE,
+                ),
+                "vision", "describe_screen",
+                lambda m: {"monitor": int(m.group(1)) - 1 if m.group(1) else 0},
+            ),
+            # "analiza la imagen X"
+            (
+                re.compile(
+                    r"(?:analiza|analizar|describe|describir)\s+(?:la\s+)?imagen\s+(.+)",
+                    re.IGNORECASE,
+                ),
+                "vision", "analyze_local_image",
+                lambda m: {"image_path": m.group(1).strip().strip('"\'')},
+            ),
+            # "busca el botón X en pantalla"
+            (
+                re.compile(
+                    r"(?:busca|buscar|encuentra|encontrar|localiza|localizar)\s+"
+                    r"(?:el\s+|la\s+|los\s+|las\s+)?"
+                    r"(?:bot[oó]n|icono|texto|elemento|campo)\s+(.+?)"
+                    r"\s+(?:en\s+)?(?:la\s+)?pantalla",
+                    re.IGNORECASE,
+                ),
+                "vision", "find_element",
+                lambda m: {"element_description": m.group(1).strip()},
+            ),
+            # "lee el texto de la imagen X"
+            (
+                re.compile(
+                    r"(?:lee|leer|extrae|extraer)\s+(?:el\s+)?texto\s+"
+                    r"(?:de\s+)?(?:la\s+)?imagen\s+(.+)",
+                    re.IGNORECASE,
+                ),
+                "vision", "read_image_text",
+                lambda m: {"image_path": m.group(1).strip().strip('"\'')},
+            ),
+        ])
+
+        # ─── Control multimedia ───────────────────────────────
+        patterns.extend([
+            # Play/Pause
+            (
+                re.compile(
+                    r"(?:reproduce|reproducir|play|reanuda|reanudar)\s+(?:la\s+)?(?:m[uú]sica|canci[oó]n|audio|media)?",
+                    re.IGNORECASE,
+                ),
+                "media_control", "play_pause", lambda m: {},
+            ),
+            (
+                re.compile(
+                    r"(?:pausa|pausar|pause|para|parar)\s+(?:la\s+)?(?:m[uú]sica|canci[oó]n|audio|media|reproducci[oó]n)?",
+                    re.IGNORECASE,
+                ),
+                "media_control", "play_pause", lambda m: {},
+            ),
+            # Siguiente canción
+            (
+                re.compile(
+                    r"(?:siguiente|next)\s+(?:canci[oó]n|pista|track|tema|v[ií]deo|video)?",
+                    re.IGNORECASE,
+                ),
+                "media_control", "next_track", lambda m: {},
+            ),
+            (
+                re.compile(
+                    r"(?:pasa|pasar|skip)\s+(?:de\s+)?(?:canci[oó]n|pista|track|tema)?",
+                    re.IGNORECASE,
+                ),
+                "media_control", "next_track", lambda m: {},
+            ),
+            # Canción anterior
+            (
+                re.compile(
+                    r"(?:anterior|previous|prev)\s+(?:canci[oó]n|pista|track|tema)?",
+                    re.IGNORECASE,
+                ),
+                "media_control", "previous_track", lambda m: {},
+            ),
+            (
+                re.compile(
+                    r"(?:vuelve|volver|pon)\s+(?:la\s+)?(?:canci[oó]n|pista|tema)\s+anterior",
+                    re.IGNORECASE,
+                ),
+                "media_control", "previous_track", lambda m: {},
+            ),
+            # ¿Qué suena? / Now playing
+            (
+                re.compile(
+                    r"(?:qu[eé]|que)\s+(?:est[aá]s?\s+)?(?:suena|sonando|reproduci[eé]ndo|playing|escuchando)"
+                    r"|(?:qu[eé]|que)\s+canci[oó]n\s+(?:es|suena)",
+                    re.IGNORECASE,
+                ),
+                "media_control", "spotify_now_playing", lambda m: {},
+            ),
+            # Volumen de app: "pon el volumen de spotify al 50"
+            (
+                re.compile(
+                    r"(?:pon|poner|set|ajusta|ajustar)\s+(?:el\s+)?volumen\s+"
+                    r"(?:de|del)\s+(.+?)\s+(?:a|al|en)\s+(\d+)",
+                    re.IGNORECASE,
+                ),
+                "media_control", "set_app_volume",
+                lambda m: {"app_name": m.group(1).strip(), "volume": int(m.group(2)) / 100},
+            ),
+            # Mutear app: "silencia spotify"
+            (
+                re.compile(
+                    r"(?:silencia|silenciar|mutea|mutear|mute)\s+(.+)",
+                    re.IGNORECASE,
+                ),
+                "media_control", "mute_app",
+                lambda m: {"app_name": m.group(1).strip()},
+            ),
+            # Pausa YouTube
+            (
+                re.compile(
+                    r"(?:pausa|pausar|pause|para|parar)\s+(?:el\s+)?(?:youtube|v[ií]deo|video)",
+                    re.IGNORECASE,
+                ),
+                "media_control", "youtube_play_pause", lambda m: {},
+            ),
+            # YouTube fullscreen
+            (
+                re.compile(
+                    r"(?:pon|poner|activa|activar)\s+(?:pantalla\s+completa|fullscreen)\s+"
+                    r"(?:en\s+)?(?:el\s+)?(?:youtube|v[ií]deo|video)",
+                    re.IGNORECASE,
+                ),
+                "media_control", "youtube_fullscreen", lambda m: {},
+            ),
+        ])
+
+        # ─── Calendario ──────────────────────────────────────
+        patterns.extend([
+            # "crea un evento X a las HH:MM" / "añade evento X mañana a las 15"
+            (
+                re.compile(
+                    r"(?:crea|crear|a[ñn]ade|a[ñn]adir|agenda|agendar|programa|programar)\s+"
+                    r"(?:un\s+)?(?:evento|cita|reunión|reunion|recordatorio)\s+"
+                    r"(.+?)(?:\s+(?:para|el|a\s+las?)\s+(.+))?\s*$",
+                    re.IGNORECASE,
+                ),
+                "calendar", "add_event",
+                lambda m: {
+                    "title": m.group(1).strip().rstrip(" para el a las"),
+                    "datetime_str": m.group(2).strip() if m.group(2) else "",
+                    "description": "",
+                },
+            ),
+            # "recuérdame X en 30 minutos"
+            (
+                re.compile(
+                    r"(?:recu[eé]rdame|recordar|rem[ií]ndeme|reminder)\s+"
+                    r"(.+?)\s+(?:en|dentro\s+de)\s+(\d+)\s+(?:minutos?|horas?|min|h)",
+                    re.IGNORECASE,
+                ),
+                "calendar", "add_event",
+                lambda m: {
+                    "title": m.group(1).strip(),
+                    "datetime_str": f"en {m.group(2)} {'minutos' if any(x in m.group(0).lower() for x in ['min']) else 'horas' if 'hora' in m.group(0).lower() else 'minutos'}",
+                    "description": "Recordatorio",
+                },
+            ),
+            # "recuérdame X a las 5pm" / "recuérdame X mañana"
+            (
+                re.compile(
+                    r"(?:recu[eé]rdame|recordar|rem[ií]ndeme)\s+(.+?)\s+"
+                    r"(?:a\s+las?\s+|para\s+(?:las?\s+)?|(?:para\s+)?ma[ñn]ana|(?:para\s+)?hoy)(.+)?\s*$",
+                    re.IGNORECASE,
+                ),
+                "calendar", "add_event",
+                lambda m: {
+                    "title": m.group(1).strip(),
+                    "datetime_str": (m.group(2) or "").strip() if m.group(2) else "mañana" if "mañana" in m.group(0).lower() else "hoy",
+                    "description": "Recordatorio",
+                },
+            ),
+            # "eventos de hoy" / "qué tengo hoy"
+            (
+                re.compile(
+                    r"(?:eventos?|citas?|agenda|qu[eé]\s+tengo|que\s+tengo)\s+"
+                    r"(?:de\s+|para\s+)?hoy",
+                    re.IGNORECASE,
+                ),
+                "calendar", "get_today_events", lambda m: {},
+            ),
+            # "eventos de mañana"
+            (
+                re.compile(
+                    r"(?:eventos?|citas?|agenda|qu[eé]\s+tengo|que\s+tengo)\s+"
+                    r"(?:de\s+|para\s+)?ma[ñn]ana",
+                    re.IGNORECASE,
+                ),
+                "calendar", "get_upcoming_events",
+                lambda m: {"hours": 48},
+            ),
+            # "eventos de la semana"
+            (
+                re.compile(
+                    r"(?:eventos?|citas?|agenda|qu[eé]\s+tengo|que\s+tengo)\s+"
+                    r"(?:de\s+|para\s+)?(?:la\s+|esta\s+)?semana",
+                    re.IGNORECASE,
+                ),
+                "calendar", "get_week_events", lambda m: {},
+            ),
+            # "elimina el evento X"
+            (
+                re.compile(
+                    r"(?:elimina|eliminar|borra|borrar|cancela|cancelar)\s+"
+                    r"(?:el\s+)?(?:evento|cita|reunión|reunion)\s+(.+)",
+                    re.IGNORECASE,
+                ),
+                "calendar", "remove_event",
+                lambda m: {"event_id": m.group(1).strip()},
+            ),
+        ])
+
+        # ─── Plugins ─────────────────────────────────────────
+        patterns.extend([
+            # "lista plugins" / "qué plugins hay"
+            (
+                re.compile(
+                    r"(?:lista|listar|muestra|mostrar|qu[eé]\s+|que\s+)"
+                    r"(?:los\s+)?plugins?\s*(?:hay|tengo|cargados?|instalados?)?",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "list_plugins", lambda m: {},
+            ),
+            # "recarga plugins"
+            (
+                re.compile(
+                    r"(?:recarga|recargar|reload|actualiza|actualizar)\s+"
+                    r"(?:los\s+)?plugins?",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "reload_plugins", lambda m: {},
+            ),
+        ])
+
+        # ─── Notificaciones ──────────────────────────────────
+        patterns.extend([
+            (
+                re.compile(
+                    r"(?:activa|activar|enciende|encender|habilita|habilitar|enable)\s+"
+                    r"(?:las\s+)?notificaciones?",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "toggle_notifications",
+                lambda m: {"enabled": True},
+            ),
+            (
+                re.compile(
+                    r"(?:desactiva|desactivar|apaga|apagar|deshabilita|deshabilitar|disable)\s+"
+                    r"(?:las\s+)?notificaciones?",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "toggle_notifications",
+                lambda m: {"enabled": False},
+            ),
+        ])
+
+        # ─── Escucha continua ─────────────────────────────────
+        patterns.extend([
+            (
+                re.compile(
+                    r"(?:activa|activar|enciende|encender|modo)\s+"
+                    r"(?:la\s+)?(?:escucha\s+continua|modo\s+continuo|conversaci[oó]n\s+continua)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "toggle_continuous_listening",
+                lambda m: {"enabled": True},
+            ),
+            (
+                re.compile(
+                    r"(?:desactiva|desactivar|apaga|apagar)\s+"
+                    r"(?:la\s+)?(?:escucha\s+continua|modo\s+continuo|conversaci[oó]n\s+continua)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "toggle_continuous_listening",
+                lambda m: {"enabled": False},
+            ),
+        ])
+
         return patterns
 
     # ─── Parsing ──────────────────────────────────────────────
@@ -693,6 +993,14 @@ class CommandParser:
             r"|resuelve|resolver|soluciona|completa|contesta|responde"
             r"|enfoca|enfocar|cambia|minimiza|maximiza"
             r"|copia|copiar|lee|leer|describe"
+            r"|reproduce|reproducir|play|pausa|pausar|pause|para|parar"
+            r"|siguiente|next|anterior|previous|prev|pasa|skip"
+            r"|silencia|silenciar|mutea|mutear"
+            r"|crea|crear|a[ñn]ade|a[ñn]adir|agenda|programa|programar"
+            r"|recu[eé]rdame|recordar"
+            r"|lista|listar|recarga|recargar|reload"
+            r"|activa|activar|desactiva|desactivar"
+            r"|analiza|analizar"
         )
 
         # Paso 1: dividir por 'y' / 'y luego' / 'y después' / comas
