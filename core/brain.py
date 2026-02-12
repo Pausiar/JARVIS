@@ -203,8 +203,8 @@ class JarvisBrain:
                     "options": {
                         "temperature": 0.7,
                         "top_p": 0.9,
-                        "num_predict": 200,
-                        "num_ctx": 2048,
+                        "num_predict": 150,
+                        "num_ctx": 1024,
                     },
                 },
                 timeout=35,
@@ -214,7 +214,7 @@ class JarvisBrain:
             if resp.status_code == 200:
                 assistant_message = ""
                 start_time = time.time()
-                max_total_seconds = 30  # Límite total para evitar bloqueos
+                max_total_seconds = 25  # Límite total para evitar bloqueos
                 for line in resp.iter_lines():
                     if line:
                         data = json.loads(line)
@@ -228,6 +228,9 @@ class JarvisBrain:
                         logger.warning(f"LLM: respuesta parcial tras {max_total_seconds}s")
                         resp.close()
                         break
+
+                if not assistant_message:
+                    return "No he podido generar una respuesta, señor. Inténtelo de nuevo."
 
                 # Guardar en historial
                 self.conversation_history.append(

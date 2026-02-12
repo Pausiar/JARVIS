@@ -476,7 +476,7 @@ class CommandParser:
             # ─── Lectura de pantalla (qué hay en pantalla) ──
             (
                 re.compile(
-                    r"(?:qu[eé]|que|what)\s+(?:hay|pone|dice|se\s+ve|aparece)\s+"
+                    r"(?:qu[eé]|que|what)\s+(?:hay|pone|dice[n]?|se\s+ve|aparece)\s+"
                     r"(?:en\s+)?(?:la\s+)?(?:pantalla|screen)",
                     re.IGNORECASE,
                 ),
@@ -485,7 +485,7 @@ class CommandParser:
             ),
             (
                 re.compile(
-                    r"(?:lee|leer|describe|describir)\s+(?:la\s+)?(?:pantalla|screen)",
+                    r"(?:lee|leer|describe|describir|dime)\s+(?:lo\s+que\s+(?:hay|dice|pone)\s+en\s+)?(?:la\s+)?(?:pantalla|screen)",
                     re.IGNORECASE,
                 ),
                 "system_control", "get_screen_text",
@@ -829,7 +829,7 @@ class CommandParser:
             # "eventos de hoy" / "qué tengo hoy"
             (
                 re.compile(
-                    r"(?:eventos?|citas?|agenda|qu[eé]\s+tengo|que\s+tengo)\s+"
+                    r"(?:eventos?|citas?|agenda|qu[eé]\s+(?:\w+\s+)?tengo|que\s+(?:\w+\s+)?tengo)\s+"
                     r"(?:de\s+|para\s+)?hoy",
                     re.IGNORECASE,
                 ),
@@ -838,7 +838,7 @@ class CommandParser:
             # "eventos de mañana"
             (
                 re.compile(
-                    r"(?:eventos?|citas?|agenda|qu[eé]\s+tengo|que\s+tengo)\s+"
+                    r"(?:eventos?|citas?|agenda|qu[eé]\s+(?:\w+\s+)?tengo|que\s+(?:\w+\s+)?tengo)\s+"
                     r"(?:de\s+|para\s+)?ma[ñn]ana",
                     re.IGNORECASE,
                 ),
@@ -848,7 +848,7 @@ class CommandParser:
             # "eventos de la semana"
             (
                 re.compile(
-                    r"(?:eventos?|citas?|agenda|qu[eé]\s+tengo|que\s+tengo)\s+"
+                    r"(?:eventos?|citas?|agenda|qu[eé]\s+(?:\w+\s+)?tengo|que\s+(?:\w+\s+)?tengo)\s+"
                     r"(?:de\s+|para\s+)?(?:la\s+|esta\s+)?semana",
                     re.IGNORECASE,
                 ),

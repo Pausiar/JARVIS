@@ -714,7 +714,7 @@ class SystemControl:
 
             result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-                capture_output=True, text=True, timeout=30
+                capture_output=True, text=True, timeout=20
             )
 
             output = result.stdout.strip()
@@ -839,7 +839,7 @@ class SystemControl:
 
             result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-                capture_output=True, text=True, timeout=30
+                capture_output=True, text=True, timeout=20
             )
 
             lines = []
@@ -1233,7 +1233,11 @@ class SystemControl:
         if not lines:
             return "No se pudo leer la pantalla."
         lines.sort(key=lambda l: (l["y"], l["x"]))
-        return "\n".join(line["text"] for line in lines)
+        text = "\n".join(line["text"] for line in lines)
+        # Truncar si es muy largo para evitar respuestas enormes
+        if len(text) > 2000:
+            text = text[:2000] + "\n[... texto truncado ...]"       
+        return text
 
     # ─── Portapapeles ─────────────────────────────────────────
 

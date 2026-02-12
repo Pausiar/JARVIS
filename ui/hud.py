@@ -354,6 +354,12 @@ class JarvisHUD(QMainWindow):
 
         self._worker_thread.start()
 
+        # Safety timeout: si el worker no responde en 45s, desbloquear UI
+        self._worker_timeout = QTimer()
+        self._worker_timeout.setSingleShot(True)
+        self._worker_timeout.timeout.connect(self._on_worker_timeout)
+        self._worker_timeout.start(45000)
+
     def _set_input_enabled(self, enabled: bool):
         """Habilita o deshabilita todos los controles de entrada."""
         self.send_button.setEnabled(enabled)
@@ -363,6 +369,8 @@ class JarvisHUD(QMainWindow):
     @Slot(str)
     def _on_response(self, response: str):
         """Callback cuando el LLM responde."""
+        if hasattr(self, '_worker_timeout'):
+            self._worker_timeout.stop()
         self._is_processing = False
         self._add_assistant_message(response)
         self._set_state("idle", "Listo")
@@ -379,6 +387,8 @@ class JarvisHUD(QMainWindow):
     @Slot(str)
     def _on_error(self, error: str):
         """Callback en caso de error."""
+        if hasattr(self, '_worker_timeout'):
+            self._worker_timeout.stop()
         self._is_processing = False
         self._add_assistant_message(
             f"Me temo que ha ocurrido un error, señor: {error}"
@@ -387,6 +397,19 @@ class JarvisHUD(QMainWindow):
         self._set_input_enabled(True)
         self.input_field.setFocus()
         QTimer.singleShot(3000, lambda: self._set_state("idle", "Listo"))
+
+    @Slot()
+    def _on_worker_timeout(self):
+        """Safety: si el worker no responde en 45s, desbloquear la UI."""
+        if self._is_processing:
+            logger.warning("Worker timeout: desbloqueando UI tras 45s")
+            self._is_processing = False
+            self._add_assistant_message(
+                "La solicitud ha tardado demasiado, señor. Intente de nuevo."
+            )
+            self._set_state("idle", "Listo")
+            self._set_input_enabled(True)
+            self.input_field.setFocus()
 
     # ─── Chat UI ──────────────────────────────────────────────
 
