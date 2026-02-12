@@ -48,16 +48,25 @@ def initialize_core():
     from core.brain import JarvisBrain
     brain = JarvisBrain()
 
-    ollama_available = brain.is_available()
-    ollama_status = "✅ Conectado" if ollama_available else "❌ No disponible"
-    logger.info(f"  LLM (Ollama): {ollama_status}")
+    # Mostrar modo de operación
+    if brain.mode == "cloud":
+        logger.info(f"  Modo: ☁️ CLOUD ({brain.cloud_provider})")
+        if brain._get_cloud_api_key():
+            logger.info(f"  API key: ✅ Configurada")
+        else:
+            logger.warning(f"  API key: ❌ No configurada — configure '{brain.cloud_provider}_api_key' en data/config.json")
+    else:
+        ollama_available = brain.is_available()
+        ollama_status = "✅ Conectado" if ollama_available else "❌ No disponible"
+        logger.info(f"  Modo: 💻 LOCAL (Ollama)")
+        logger.info(f"  LLM (Ollama): {ollama_status}")
 
-    # Calentar el modelo en background para evitar lag en la primera petición
-    if ollama_available:
-        import threading
-        warmup_thread = threading.Thread(target=brain.warmup, daemon=True)
-        warmup_thread.start()
-        logger.info("  Calentamiento del modelo iniciado en background.")
+        # Calentar el modelo en background solo en modo local
+        if ollama_available:
+            import threading
+            warmup_thread = threading.Thread(target=brain.warmup, daemon=True)
+            warmup_thread.start()
+            logger.info("  Modelo cargándose en background.")
 
     # ── Voice Input (STT) ──
     from core.voice_input import VoiceInput

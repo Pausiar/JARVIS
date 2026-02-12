@@ -1,6 +1,6 @@
 """
 J.A.R.V.I.S. — Brain (Cerebro)
-Integración con Ollama para LLM local.
+Motor de inteligencia dual: Local (Ollama) y Cloud (Groq/Gemini).
 Gestiona la conversación, personalidad y razonamiento de JARVIS.
 """
 
@@ -21,24 +21,109 @@ from config import (
     OLLAMA_MODEL,
     JARVIS_SYSTEM_PROMPT,
     USER_CONFIG,
+    BRAIN_MODE,
+    CLOUD_PROVIDER,
+    GROQ_API_KEY,
+    GROQ_MODEL,
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
 )
 
 logger = logging.getLogger("jarvis.brain")
 
 
 class JarvisBrain:
-    """Motor de inteligencia de JARVIS usando Ollama (LLM local)."""
+    """Motor de inteligencia de JARVIS — dual: local (Ollama) o cloud (Groq/Gemini)."""
+
+    # ─── Configuración de proveedores cloud ───────────────────
+    CLOUD_ENDPOINTS = {
+        "groq": "https://api.groq.com/openai/v1/chat/completions",
+        "gemini": "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+    }
 
     def __init__(self, model: str = None, host: str = None):
         self.model = model or OLLAMA_MODEL
         self.host = host or OLLAMA_HOST
         self.system_prompt = JARVIS_SYSTEM_PROMPT
         self.conversation_history: list[dict] = []
-        self.max_history = 6  # Máximo de mensajes en el historial activo
+        self.max_history = 6
         self._available = None
-        self._available_checked_at = 0  # Timestamp del último check
+        self._available_checked_at = 0
         self._warmed_up = False
-        logger.info(f"JarvisBrain inicializado con modelo: {self.model}")
+
+        # Modo de operación: "local" o "cloud"
+        self.mode = USER_CONFIG.get("brain_mode", BRAIN_MODE)
+        self.cloud_provider = USER_CONFIG.get("cloud_provider", CLOUD_PROVIDER)
+        self.groq_api_key = USER_CONFIG.get("groq_api_key", GROQ_API_KEY)
+        self.groq_model = USER_CONFIG.get("groq_model", GROQ_MODEL)
+        self.gemini_api_key = USER_CONFIG.get("gemini_api_key", GEMINI_API_KEY)
+        self.gemini_model = USER_CONFIG.get("gemini_model", GEMINI_MODEL)
+
+        mode_label = f"CLOUD ({self.cloud_provider})" if self.mode == "cloud" else f"LOCAL ({self.model})"
+        logger.info(f"JarvisBrain inicializado en modo: {mode_label}")
+
+    def set_mode(self, mode: str) -> str:
+        """Cambia entre modo 'local' y 'cloud'."""
+        mode = mode.lower().strip()
+        if mode not in ("local", "cloud"):
+            return f"Modo '{mode}' no válido. Use 'local' o 'cloud'."
+
+        old_mode = self.mode
+        self.mode = mode
+
+        # Persistir en config.json
+        try:
+            from config import load_config, save_config
+            cfg = load_config()
+            cfg["brain_mode"] = mode
+            save_config(cfg)
+        except Exception as e:
+            logger.warning(f"No se pudo guardar modo en config: {e}")
+
+        if mode == "cloud":
+            provider = self.cloud_provider
+            has_key = bool(self._get_cloud_api_key())
+            if not has_key:
+                return (
+                    f"Modo cambiado a CLOUD ({provider}), pero falta la API key. "
+                    f"Configure '{provider}_api_key' en data/config.json o config.py."
+                )
+            return f"Modo cambiado a CLOUD ({provider}). Las respuestas serán más rápidas, señor."
+        else:
+            return "Modo cambiado a LOCAL (Ollama). Usando procesamiento en su equipo, señor."
+
+    def set_cloud_provider(self, provider: str) -> str:
+        """Cambia el proveedor cloud (groq o gemini)."""
+        provider = provider.lower().strip()
+        if provider not in ("groq", "gemini"):
+            return f"Proveedor '{provider}' no soportado. Use 'groq' o 'gemini'."
+        self.cloud_provider = provider
+        try:
+            from config import load_config, save_config
+            cfg = load_config()
+            cfg["cloud_provider"] = provider
+            save_config(cfg)
+        except Exception:
+            pass
+        return f"Proveedor cloud cambiado a {provider}."
+
+    def _get_cloud_api_key(self) -> str:
+        """Obtiene la API key del proveedor cloud actual."""
+        if self.cloud_provider == "groq":
+            return self.groq_api_key
+        elif self.cloud_provider == "gemini":
+            return self.gemini_api_key
+        return ""
+
+    def get_mode_info(self) -> str:
+        """Devuelve info sobre el modo actual."""
+        if self.mode == "cloud":
+            provider = self.cloud_provider
+            has_key = "✅" if self._get_cloud_api_key() else "❌ sin API key"
+            model = self.groq_model if provider == "groq" else self.gemini_model
+            return f"Modo: CLOUD | Proveedor: {provider} | Modelo: {model} | API key: {has_key}"
+        else:
+            return f"Modo: LOCAL | Modelo: {self.model} | Host: {self.host}"
 
     def warmup(self) -> bool:
         """Pre-carga el modelo en RAM sin generar texto.
@@ -184,30 +269,170 @@ class JarvisBrain:
 
     def chat(self, user_message: str, context: str = "") -> str:
         """
-        Envía un mensaje al LLM y obtiene la respuesta completa.
-        Usa timeout basado en inactividad (no en tiempo total) para
-        tolerar la carga lenta del modelo en hardware modesto.
-
-        Args:
-            user_message: Mensaje del usuario.
-            context: Contexto adicional (ej: contenido de un archivo).
-
-        Returns:
-            Respuesta de JARVIS como string.
+        Envía un mensaje al LLM y obtiene la respuesta.
+        Enruta automáticamente entre modo local (Ollama) y cloud (Groq/Gemini).
         """
-        # Check availability first
-        if not self.is_available():
-            return (
-                "Me temo que no puedo conectar con mi motor de razonamiento, señor. "
-                "¿Podría verificar que Ollama esté ejecutándose con el modelo mistral?"
-            )
-
         if context:
             full_message = f"[CONTEXTO ADICIONAL: {context}]\n\nUsuario: {user_message}"
         else:
             full_message = user_message
 
         messages = self._build_messages(full_message)
+
+        # Enrutar según modo
+        if self.mode == "cloud":
+            result = self._chat_cloud(messages)
+        else:
+            result = self._chat_local(messages)
+
+        if result and not result.startswith(("Me temo", "No he podido", "La respuesta", "Error")):
+            # Guardar en historial solo si fue exitoso
+            self.conversation_history.append(
+                {"role": "user", "content": user_message}
+            )
+            self.conversation_history.append(
+                {"role": "assistant", "content": result}
+            )
+
+        return result
+
+    # ─── Chat Cloud (Groq / Gemini) ──────────────────────────
+
+    def _chat_cloud(self, messages: list[dict]) -> str:
+        """Chat usando API cloud (Groq o Gemini). Rápido, sin consumo local."""
+        api_key = self._get_cloud_api_key()
+        if not api_key:
+            return (
+                f"No hay API key configurada para {self.cloud_provider}, señor. "
+                f"Añada '{self.cloud_provider}_api_key' en data/config.json."
+            )
+
+        if self.cloud_provider == "groq":
+            return self._chat_groq(messages, api_key)
+        elif self.cloud_provider == "gemini":
+            return self._chat_gemini(messages, api_key)
+        else:
+            return f"Proveedor cloud '{self.cloud_provider}' no soportado."
+
+    def _chat_groq(self, messages: list[dict], api_key: str) -> str:
+        """Chat con Groq API (formato OpenAI-compatible)."""
+        try:
+            resp = requests.post(
+                self.CLOUD_ENDPOINTS["groq"],
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.groq_model,
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 1024,
+                },
+                timeout=30,
+            )
+
+            if resp.status_code == 200:
+                data = resp.json()
+                content = data["choices"][0]["message"]["content"]
+                logger.info(f"Groq: respuesta de {len(content)} chars")
+                return content
+            elif resp.status_code == 429:
+                logger.warning("Groq: rate limit alcanzado")
+                return "He alcanzado el límite de peticiones por minuto, señor. Espere un momento."
+            elif resp.status_code == 401:
+                logger.error("Groq: API key inválida")
+                return "La API key de Groq no es válida, señor. Verifique la configuración."
+            else:
+                error = resp.text[:200]
+                logger.error(f"Groq error HTTP {resp.status_code}: {error}")
+                return f"Error con Groq (HTTP {resp.status_code}), señor."
+
+        except requests.Timeout:
+            return "Groq ha tardado demasiado en responder, señor."
+        except requests.ConnectionError:
+            return "No puedo conectar con Groq, señor. Verifique su conexión a internet."
+        except Exception as e:
+            logger.error(f"Error con Groq: {e}")
+            return f"Error inesperado con Groq: {e}"
+
+    def _chat_gemini(self, messages: list[dict], api_key: str) -> str:
+        """Chat con Google Gemini API."""
+        try:
+            # Convertir formato OpenAI → formato Gemini
+            gemini_contents = []
+            system_instruction = None
+
+            for msg in messages:
+                role = msg["role"]
+                content = msg["content"]
+                if role == "system":
+                    system_instruction = content
+                elif role == "user":
+                    gemini_contents.append({
+                        "role": "user",
+                        "parts": [{"text": content}]
+                    })
+                elif role == "assistant":
+                    gemini_contents.append({
+                        "role": "model",
+                        "parts": [{"text": content}]
+                    })
+
+            url = self.CLOUD_ENDPOINTS["gemini"].format(model=self.gemini_model)
+            url += f"?key={api_key}"
+
+            body = {
+                "contents": gemini_contents,
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "maxOutputTokens": 1024,
+                },
+            }
+            if system_instruction:
+                body["systemInstruction"] = {
+                    "parts": [{"text": system_instruction}]
+                }
+
+            resp = requests.post(url, json=body, timeout=30)
+
+            if resp.status_code == 200:
+                data = resp.json()
+                candidates = data.get("candidates", [])
+                if candidates:
+                    content = candidates[0].get("content", {})
+                    parts = content.get("parts", [])
+                    text = "".join(p.get("text", "") for p in parts)
+                    logger.info(f"Gemini: respuesta de {len(text)} chars")
+                    return text
+                return "No he obtenido respuesta de Gemini, señor."
+            elif resp.status_code == 429:
+                return "He alcanzado el límite de Gemini, señor. Espere un momento."
+            elif resp.status_code in (401, 403):
+                return "La API key de Gemini no es válida, señor. Verifique la configuración."
+            else:
+                error = resp.text[:200]
+                logger.error(f"Gemini error HTTP {resp.status_code}: {error}")
+                return f"Error con Gemini (HTTP {resp.status_code}), señor."
+
+        except requests.Timeout:
+            return "Gemini ha tardado demasiado en responder, señor."
+        except requests.ConnectionError:
+            return "No puedo conectar con Gemini, señor. Verifique su conexión a internet."
+        except Exception as e:
+            logger.error(f"Error con Gemini: {e}")
+            return f"Error inesperado con Gemini: {e}"
+
+    # ─── Chat Local (Ollama) ─────────────────────────────────
+
+    def _chat_local(self, messages: list[dict]) -> str:
+        """Chat usando Ollama local con streaming y reintentos."""
+        if not self.is_available():
+            return (
+                "Me temo que no puedo conectar con Ollama, señor. "
+                "¿Podría verificar que esté ejecutándose? "
+                "O cambie a modo cloud: 'modo cloud'."
+            )
 
         max_retries = 2
         for attempt in range(max_retries):
@@ -289,15 +514,7 @@ class JarvisBrain:
                     logger.error(f"LLM: respuesta vacía tras {elapsed:.1f}s (sin reintentos)")
                     return "No he podido generar una respuesta, señor. Inténtelo de nuevo."
 
-                # Guardar en historial
-                self.conversation_history.append(
-                    {"role": "user", "content": user_message}
-                )
-                self.conversation_history.append(
-                    {"role": "assistant", "content": assistant_message}
-                )
-
-                logger.info(f"Respuesta generada ({len(assistant_message)} chars, {elapsed:.1f}s)")
+                logger.info(f"Respuesta local ({len(assistant_message)} chars, {elapsed:.1f}s)")
                 return assistant_message
             else:
                 error_msg = f"Error del LLM (HTTP {resp.status_code}): {resp.text}"

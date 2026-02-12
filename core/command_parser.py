@@ -932,6 +932,60 @@ class CommandParser:
             ),
         ])
 
+        # ─── Modo IA (local/cloud) ───────────────────────────
+        patterns.extend([
+            # "modo cloud", "cambia a modo cloud", "usa la nube"
+            (
+                re.compile(
+                    r"(?:modo|cambia\s+a(?:\s+modo)?|usa(?:r)?|activa(?:r)?)\s+"
+                    r"(?:cloud|nube|online|remoto|api)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "switch_brain_mode",
+                lambda m: {"mode": "cloud"},
+            ),
+            # "modo local", "cambia a modo local", "usa ollama"
+            (
+                re.compile(
+                    r"(?:modo|cambia\s+a(?:\s+modo)?|usa(?:r)?|activa(?:r)?)\s+"
+                    r"(?:local|offline|ollama)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "switch_brain_mode",
+                lambda m: {"mode": "local"},
+            ),
+            # "usa groq", "proveedor groq", "cambia a groq/gemini"
+            (
+                re.compile(
+                    r"(?:usa(?:r)?|cambia\s+a|proveedor)\s+"
+                    r"(groq|gemini)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "switch_cloud_provider",
+                lambda m: {"provider": m.group(1).lower()},
+            ),
+            # "qué modo usas", "en qué modo estás"
+            (
+                re.compile(
+                    r"(?:qu[eé]\s+modo|en\s+qu[eé]\s+modo|modo\s+actual|estado\s+(?:del\s+)?(?:modo|ia|cerebro))",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "get_brain_mode_info",
+                lambda m: {},
+            ),
+            # "configura api key groq/gemini XXXXX"
+            (
+                re.compile(
+                    r"(?:configura(?:r)?|establece(?:r)?|pon(?:er)?|set)\s+"
+                    r"(?:la\s+)?(?:api\s*key|clave|key)\s+"
+                    r"(?:de\s+)?(groq|gemini)\s+(.+)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "set_cloud_api_key",
+                lambda m: {"provider": m.group(1).lower(), "api_key": m.group(2).strip()},
+            ),
+        ])
+
         return patterns
 
     # ─── Parsing ──────────────────────────────────────────────

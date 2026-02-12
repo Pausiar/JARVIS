@@ -40,6 +40,20 @@ logging.basicConfig(
 OLLAMA_HOST = "http://localhost:11434"
 OLLAMA_MODEL = "mistral"  # Opciones: mistral, llama3, phi3
 
+# ─── Modo de IA: "local" (Ollama) o "cloud" (API gratuita) ──
+# "local" = usa Ollama en tu PC (necesita RAM/CPU)
+# "cloud" = usa API gratuita (Groq o Gemini), no consume recursos
+BRAIN_MODE = "cloud"  # Cambiar a "local" si tienes buen hardware
+
+# ─── Proveedores Cloud (APIs gratuitas) ──────────────────────
+# Groq: https://console.groq.com/keys (gratis, rápido)
+# Gemini: https://aistudio.google.com/apikey (gratis, generoso)
+CLOUD_PROVIDER = "groq"  # "groq" o "gemini"
+GROQ_API_KEY = ""  # Tu API key de Groq (https://console.groq.com/keys)
+GROQ_MODEL = "llama-3.3-70b-versatile"  # Modelo Groq (gratis)
+GEMINI_API_KEY = ""  # Tu API key de Gemini (https://aistudio.google.com/apikey)
+GEMINI_MODEL = "gemini-2.0-flash"  # Modelo Gemini (gratis)
+
 # ─── Modelo de Visión Multimodal ─────────────────────────────
 VISION_MODEL = "llava"  # Opciones: llava, llava:13b, bakllava, llava-phi3
 VISION_ENABLED = True
@@ -137,6 +151,12 @@ HUD_FONT_SIZE = 12
 DEFAULT_CONFIG = {
     "user_name": "Señor",
     "language": "es",
+    "brain_mode": BRAIN_MODE,
+    "cloud_provider": CLOUD_PROVIDER,
+    "groq_api_key": GROQ_API_KEY,
+    "groq_model": GROQ_MODEL,
+    "gemini_api_key": GEMINI_API_KEY,
+    "gemini_model": GEMINI_MODEL,
     "ollama_model": OLLAMA_MODEL,
     "vision_model": VISION_MODEL,
     "vision_enabled": VISION_ENABLED,

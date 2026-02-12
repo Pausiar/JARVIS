@@ -551,6 +551,43 @@ class Orchestrator:
         status = "activada" if enabled else "desactivada"
         return f"Escucha continua {status}."
 
+    def switch_brain_mode(self, mode: str) -> str:
+        """Cambia entre modo local (Ollama) y cloud (API)."""
+        return self.brain.set_mode(mode)
+
+    def switch_cloud_provider(self, provider: str) -> str:
+        """Cambia el proveedor cloud (groq o gemini)."""
+        return self.brain.set_cloud_provider(provider)
+
+    def get_brain_mode_info(self) -> str:
+        """Devuelve información sobre el modo actual del cerebro."""
+        return self.brain.get_mode_info()
+
+    def set_cloud_api_key(self, provider: str, api_key: str) -> str:
+        """Configura la API key de un proveedor cloud."""
+        provider = provider.lower().strip()
+        api_key = api_key.strip()
+
+        if provider not in ("groq", "gemini"):
+            return f"Proveedor '{provider}' no soportado. Use 'groq' o 'gemini'."
+
+        # Guardar en brain
+        if provider == "groq":
+            self.brain.groq_api_key = api_key
+        else:
+            self.brain.gemini_api_key = api_key
+
+        # Persistir en config.json
+        try:
+            from config import load_config, save_config
+            cfg = load_config()
+            cfg[f"{provider}_api_key"] = api_key
+            save_config(cfg)
+        except Exception as e:
+            logger.warning(f"No se pudo guardar API key: {e}")
+
+        return f"API key de {provider} configurada correctamente, señor."
+
     def get_module(self, name: str):
         """Obtiene un módulo por nombre."""
         return self.modules.get(name)
