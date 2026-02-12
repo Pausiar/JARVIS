@@ -551,16 +551,16 @@ class Orchestrator:
             # 1. MINIMIZAR la ventana de JARVIS para que no tape el PDF
             logger.info("Minimizando JARVIS para capturar pantalla...")
             self._minimize_jarvis_window()
-            time.sleep(1.0)  # Esperar a que se minimice completamente
+            time.sleep(2.0)  # Esperar a que se minimice completamente
 
-            # 2. Cerrar overlays/popups que puedan tapar el PDF
-            #    (Adobe Acrobat overlay, banners, etc.)
-            pyautogui.press('escape')
-            time.sleep(0.5)
-            # Clic en el centro de la pantalla para dar foco al contenido del PDF
+            # 2. Dar foco al contenido del PDF (clic en zona derecha, evitando sidebars)
             screen_w, screen_h = pyautogui.size()
-            pyautogui.click(screen_w // 2, screen_h // 2)
-            time.sleep(0.5)
+            # Clic en el 65% horizontal (evita sidebar izquierdo de Adobe/Chrome)
+            # y 40% vertical (zona de contenido, no toolbar ni footer)
+            click_x = int(screen_w * 0.65)
+            click_y = int(screen_h * 0.40)
+            pyautogui.click(click_x, click_y)
+            time.sleep(1.0)
 
             # 3. Leer la pantalla actual (PDF) — OCR sin truncar
             logger.info("Leyendo ejercicios de la pantalla vía OCR...")
@@ -568,13 +568,16 @@ class Orchestrator:
 
             # Primera captura (lo que se ve ahora)
             screen_text = sc.get_screen_text_full()
+            logger.info(f"OCR captura inicial: {len(screen_text)} chars")
             if screen_text and len(screen_text.strip()) > 20:
                 all_text_parts.append(screen_text)
-                logger.info(f"Captura inicial: {len(screen_text)} caracteres")
+            else:
+                logger.warning(f"OCR devolvió texto insuficiente: '{screen_text[:100]}' ")
 
             # Scroll hacia abajo y capturar más páginas (hasta 8 scrolls)
+            # scroll(-20) = 20 notches hacia abajo (~1 página de PDF)
             for i in range(8):
-                pyautogui.scroll(-5)  # Scroll down
+                pyautogui.scroll(-20)  # Scroll down (mucho más agresivo)
                 time.sleep(1.5)  # Esperar renderizado (PDFs en browser son lentos)
 
                 new_text = sc.get_screen_text_full()

@@ -777,7 +777,14 @@ class SystemControl:
             else:
                 screenshot = pyautogui.screenshot()
             screenshot.save(temp_path)
+            logger.info(f"Screenshot guardado: {temp_path} ({screenshot.size[0]}x{screenshot.size[1]})")
 
+            # Guardar copia de diagnóstico para verificar qué se capturó
+            debug_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "last_ocr_capture.png")
+            try:
+                screenshot.save(debug_path)
+            except Exception:
+                pass
             ps_script = f'''
             Add-Type -AssemblyName System.Runtime.WindowsRuntime
 
@@ -839,8 +846,14 @@ class SystemControl:
 
             result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-                capture_output=True, text=True, timeout=20
+                capture_output=True, text=True, timeout=30
             )
+
+            # Log errores de PowerShell para debugging
+            if result.stderr and result.stderr.strip():
+                logger.warning(f"OCR PowerShell stderr: {result.stderr[:300]}")
+            if result.returncode != 0:
+                logger.warning(f"OCR PowerShell exit code: {result.returncode}")
 
             lines = []
             for raw_line in result.stdout.strip().split('\n'):
@@ -856,11 +869,14 @@ class SystemControl:
                             "text": parts[4],
                         })
 
-            logger.debug(f"OCR detectó {len(lines)} líneas de texto")
+            logger.info(f"OCR detectó {len(lines)} líneas de texto")
+            if len(lines) == 0:
+                logger.warning("OCR devolvió 0 líneas. stdout completo (primeros 500 chars):")
+                logger.warning(f"  stdout: {result.stdout[:500]}")
             return lines
 
         except Exception as e:
-            logger.warning(f"Error en OCR de pantalla: {e}")
+            logger.warning(f"Error en OCR de pantalla: {e}", exc_info=True)
             return []
         finally:
             try:
