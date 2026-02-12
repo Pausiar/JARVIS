@@ -142,7 +142,6 @@ class JarvisHUD(QMainWindow):
         self.chat_layout = QVBoxLayout(self.chat_container)
         self.chat_layout.setContentsMargins(8, 8, 8, 8)
         self.chat_layout.setSpacing(4)
-        self.chat_layout.setAlignment(Qt.AlignTop)
 
         self.chat_scroll.setWidget(self.chat_container)
         main_layout.addWidget(self.chat_scroll, 1)
@@ -152,6 +151,9 @@ class JarvisHUD(QMainWindow):
             "Buenos días, señor. JARVIS a su servicio. "
             "¿En qué puedo asistirle hoy?"
         )
+
+        # Stretch al final para empujar mensajes arriba cuando hay pocos
+        self.chat_layout.addStretch(1)
 
         # ── Barra de input ──
         input_bar = QWidget()
@@ -391,13 +393,17 @@ class JarvisHUD(QMainWindow):
     def _add_user_message(self, text: str):
         """Agrega un mensaje del usuario al chat."""
         bubble = MessageBubble(text, is_user=True)
-        self.chat_layout.addWidget(bubble)
+        # Insertar ANTES del stretch final
+        count = self.chat_layout.count()
+        self.chat_layout.insertWidget(max(count - 1, 0), bubble)
         self._scroll_to_bottom()
 
     def _add_assistant_message(self, text: str):
         """Agrega un mensaje de JARVIS al chat."""
         bubble = MessageBubble(text, is_user=False)
-        self.chat_layout.addWidget(bubble)
+        # Insertar ANTES del stretch final
+        count = self.chat_layout.count()
+        self.chat_layout.insertWidget(max(count - 1, 0), bubble)
         self._scroll_to_bottom()
 
     def add_message(self, text: str, is_user: bool = False):
@@ -408,12 +414,19 @@ class JarvisHUD(QMainWindow):
             self._add_assistant_message(text)
 
     def _scroll_to_bottom(self):
-        """Scrollea al final del chat."""
-        QTimer.singleShot(100, lambda: (
-            self.chat_scroll.verticalScrollBar().setValue(
-                self.chat_scroll.verticalScrollBar().maximum()
-            )
-        ))
+        """Scrollea al último mensaje del chat."""
+        def _do_scroll():
+            # Buscar el último widget de mensaje (ignorar el stretch)
+            count = self.chat_layout.count()
+            last_bubble = None
+            for i in range(count - 1, -1, -1):
+                item = self.chat_layout.itemAt(i)
+                if item and item.widget():
+                    last_bubble = item.widget()
+                    break
+            if last_bubble:
+                self.chat_scroll.ensureWidgetVisible(last_bubble)
+        QTimer.singleShot(50, _do_scroll)
 
     def clear_chat(self):
         """Limpia todos los mensajes del chat."""

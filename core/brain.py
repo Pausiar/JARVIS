@@ -7,6 +7,7 @@ Gestiona la conversación, personalidad y razonamiento de JARVIS.
 import json
 import logging
 import re
+import time
 from typing import Optional, Generator
 
 import requests
@@ -33,7 +34,7 @@ class JarvisBrain:
         self.host = host or OLLAMA_HOST
         self.system_prompt = JARVIS_SYSTEM_PROMPT
         self.conversation_history: list[dict] = []
-        self.max_history = 10  # Máximo de mensajes en el historial activo
+        self.max_history = 6  # Máximo de mensajes en el historial activo
         self._available = None
         self._warmed_up = False
         logger.info(f"JarvisBrain inicializado con modelo: {self.model}")
@@ -206,12 +207,14 @@ class JarvisBrain:
                         "num_ctx": 2048,
                     },
                 },
-                timeout=60,
+                timeout=35,
                 stream=True,
             )
 
             if resp.status_code == 200:
                 assistant_message = ""
+                start_time = time.time()
+                max_total_seconds = 30  # Límite total para evitar bloqueos
                 for line in resp.iter_lines():
                     if line:
                         data = json.loads(line)
@@ -220,6 +223,11 @@ class JarvisBrain:
                             assistant_message += token
                         if data.get("done", False):
                             break
+                    # Abortar si tarda demasiado en total
+                    if time.time() - start_time > max_total_seconds:
+                        logger.warning(f"LLM: respuesta parcial tras {max_total_seconds}s")
+                        resp.close()
+                        break
 
                 # Guardar en historial
                 self.conversation_history.append(

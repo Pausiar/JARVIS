@@ -135,11 +135,48 @@ class MediaControl:
 
     # ─── YouTube (navegador) ──────────────────────────────────
 
+    def _focus_youtube_window(self) -> bool:
+        """Busca y enfoca la ventana del navegador con YouTube."""
+        import subprocess
+        try:
+            ps_script = '''
+            Add-Type @"
+            using System;
+            using System.Runtime.InteropServices;
+            public class WinAPI {
+                [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+                [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+            }
+"@
+            $procs = Get-Process | Where-Object {
+                $_.MainWindowTitle -like "*YouTube*" -and
+                ($_.ProcessName -match "chrome|firefox|msedge|brave|opera")
+            }
+            if ($procs) {
+                $p = $procs | Select-Object -First 1
+                [WinAPI]::ShowWindow($p.MainWindowHandle, 9) | Out-Null
+                [WinAPI]::SetForegroundWindow($p.MainWindowHandle) | Out-Null
+                Write-Output "OK"
+            } else {
+                Write-Output "NOT_FOUND"
+            }
+            '''
+            result = subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                capture_output=True, text=True, timeout=5,
+            )
+            return result.stdout.strip() == "OK"
+        except Exception as e:
+            logger.warning(f"Error enfocando YouTube: {e}")
+            return False
+
     def youtube_play_pause(self) -> str:
         """Play/pause en YouTube (navegador activo)."""
         import pyautogui
+        import time
         try:
-            # YouTube usa la tecla K para play/pause
+            if self._focus_youtube_window():
+                time.sleep(0.3)
             pyautogui.press("k")
             return "YouTube: play/pause."
         except Exception as e:
@@ -148,7 +185,10 @@ class MediaControl:
     def youtube_next(self) -> str:
         """Siguiente video en YouTube."""
         import pyautogui
+        import time
         try:
+            if self._focus_youtube_window():
+                time.sleep(0.3)
             pyautogui.hotkey("shift", "n")
             return "YouTube: siguiente video."
         except Exception as e:
@@ -157,7 +197,10 @@ class MediaControl:
     def youtube_fullscreen(self) -> str:
         """Pantalla completa en YouTube."""
         import pyautogui
+        import time
         try:
+            if self._focus_youtube_window():
+                time.sleep(0.3)
             pyautogui.press("f")
             return "YouTube: pantalla completa."
         except Exception as e:

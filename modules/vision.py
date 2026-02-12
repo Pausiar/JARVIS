@@ -203,15 +203,17 @@ class VisionEngine:
                     "stream": True,
                     "options": {
                         "temperature": 0.5,
-                        "num_predict": 512,
+                        "num_predict": 300,
                     },
                 },
-                timeout=120,
+                timeout=180,
                 stream=True,
             )
 
             if resp.status_code == 200:
                 result = ""
+                start_time = time.time()
+                max_seconds = 60  # Límite total para visión
                 for line in resp.iter_lines():
                     if line:
                         data = json.loads(line)
@@ -220,6 +222,10 @@ class VisionEngine:
                             result += token
                         if data.get("done", False):
                             break
+                    if time.time() - start_time > max_seconds:
+                        logger.warning(f"Visión: respuesta parcial tras {max_seconds}s")
+                        resp.close()
+                        break
                 logger.info(f"Análisis visual completado ({len(result)} chars)")
                 return result
             else:

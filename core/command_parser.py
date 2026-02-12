@@ -141,8 +141,8 @@ class CommandParser:
                 ),
                 "orchestrator", "solve_exercises",
                 lambda m: {
-                    "file_path": m.group(1).strip().strip('"\'"),
-                    "output_app": m.group(2).strip().strip('"\'") if m.group(2) else "",
+                    "file_path": m.group(1).strip().strip("\"'"),
+                    "output_app": m.group(2).strip().strip("\"'") if m.group(2) else "",
                 },
             ),
             (
@@ -153,8 +153,8 @@ class CommandParser:
                 ),
                 "orchestrator", "solve_exercises",
                 lambda m: {
-                    "file_path": m.group(1).strip().strip('"\'"),
-                    "output_app": m.group(2).strip().strip('"\'") if m.group(2) else "",
+                    "file_path": m.group(1).strip().strip("\"'"),
+                    "output_app": m.group(2).strip().strip("\"'") if m.group(2) else "",
                 },
             ),
             # "contesta las preguntas del PDF X"
@@ -166,8 +166,8 @@ class CommandParser:
                 ),
                 "orchestrator", "solve_exercises",
                 lambda m: {
-                    "file_path": m.group(1).strip().strip('"\'"),
-                    "output_app": m.group(2).strip().strip('"\'") if m.group(2) else "",
+                    "file_path": m.group(1).strip().strip("\"'"),
+                    "output_app": m.group(2).strip().strip("\"'") if m.group(2) else "",
                 },
             ),
         ])
@@ -448,7 +448,7 @@ class CommandParser:
             # ─── Focus window / enfoque de ventana ──
             (
                 re.compile(
-                    r"(?:enfoca|enfocar|pon|cambia\s+a|switch\s+to|focus|trae|traer)\s+"
+                    r"(?:enfoca|enfocar|cambia\s+a|switch\s+to|focus|trae|traer)\s+"
                     r"(?:la\s+)?(?:ventana\s+(?:de\s+)?|window\s+)?(.+)",
                     re.IGNORECASE,
                 ),
@@ -566,8 +566,8 @@ class CommandParser:
                 ),
                 "system_control", "move_discord_user",
                 lambda m: {
-                    "username": m.group(1).strip().strip('"\'"),
-                    "channel": m.group(2).strip().strip('"\'"),
+                    "username": m.group(1).strip().strip("\"'"),
+                    "channel": m.group(2).strip().strip("\"'"),
                 },
             ),
             (
@@ -769,6 +769,20 @@ class CommandParser:
 
         # ─── Calendario ──────────────────────────────────────
         patterns.extend([
+            # "añade evento X en 30 minutos" (formato específico: en X tiempo)
+            (
+                re.compile(
+                    r"(?:crea|crear|a[ñn]ade|a[ñn]adir|agenda|agendar|programa|programar)\s+"
+                    r"(?:un\s+)?(?:evento|cita|reunión|reunion|recordatorio)\s+"
+                    r"(.+?)\s+en\s+(\d+)\s+(minutos?|horas?|min|h|segundos?|seg)",
+                    re.IGNORECASE,
+                ),
+                "calendar", "add_event",
+                lambda m: {
+                    "title": m.group(1).strip(),
+                    "start_time": f"en {m.group(2)} {'minutos' if 'seg' in m.group(3).lower() or 'segundo' in m.group(3).lower() else m.group(3)}",
+                },
+            ),
             # "crea un evento X a las HH:MM" / "añade evento X mañana a las 15"
             (
                 re.compile(
@@ -780,7 +794,7 @@ class CommandParser:
                 "calendar", "add_event",
                 lambda m: {
                     "title": m.group(1).strip().rstrip(" para el a las"),
-                    "datetime_str": m.group(2).strip() if m.group(2) else "",
+                    "start_time": m.group(2).strip() if m.group(2) else "",
                     "description": "",
                 },
             ),
@@ -794,7 +808,7 @@ class CommandParser:
                 "calendar", "add_event",
                 lambda m: {
                     "title": m.group(1).strip(),
-                    "datetime_str": f"en {m.group(2)} {'minutos' if any(x in m.group(0).lower() for x in ['min']) else 'horas' if 'hora' in m.group(0).lower() else 'minutos'}",
+                    "start_time": f"en {m.group(2)} {'minutos' if any(x in m.group(0).lower() for x in ['min']) else 'horas' if 'hora' in m.group(0).lower() else 'minutos'}",
                     "description": "Recordatorio",
                 },
             ),
@@ -808,7 +822,7 @@ class CommandParser:
                 "calendar", "add_event",
                 lambda m: {
                     "title": m.group(1).strip(),
-                    "datetime_str": (m.group(2) or "").strip() if m.group(2) else "mañana" if "mañana" in m.group(0).lower() else "hoy",
+                    "start_time": (m.group(2) or "").strip() if m.group(2) else "mañana" if "mañana" in m.group(0).lower() else "hoy",
                     "description": "Recordatorio",
                 },
             ),
