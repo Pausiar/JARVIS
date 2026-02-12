@@ -173,6 +173,17 @@ class CommandParser:
                 "orchestrator", "solve_screen_exercises",
                 lambda m: {"target_tab": "next"},
             ),
+            # "resuelve los ejercicios del PDF" (sin especificar destino — solo lee y resuelve)
+            (
+                re.compile(
+                    r"(?:resuelve|resolver|haz|hacer|soluciona)\s+"
+                    r"(?:(?:los?|el)\s+)?(?:ejercicios?|preguntas?|problemas?|actividades?)\s+"
+                    r"(?:del?\s+)?(?:(?:ese|este|el)\s+)?pdf\s*$",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "solve_screen_exercises",
+                lambda m: {"target_tab": "next"},
+            ),
             # ─── Resolver ejercicios de ARCHIVO local ──
             (
                 re.compile(

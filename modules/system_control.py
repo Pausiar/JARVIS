@@ -1239,6 +1239,17 @@ class SystemControl:
             text = text[:2000] + "\n[... texto truncado ...]"       
         return text
 
+    def get_screen_text_full(self) -> str:
+        """
+        Devuelve TODO el texto visible en pantalla sin truncar.
+        Para captura de ejercicios/documentos donde necesitamos el contenido completo.
+        """
+        lines = self._ocr_screen_lines()
+        if not lines:
+            return ""
+        lines.sort(key=lambda l: (l["y"], l["x"]))
+        return "\n".join(line["text"] for line in lines)
+
     # ─── Portapapeles ─────────────────────────────────────────
 
     def read_clipboard(self) -> str:

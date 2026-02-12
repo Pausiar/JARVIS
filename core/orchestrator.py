@@ -533,68 +533,93 @@ class Orchestrator:
         con el LLM, y escribe las soluciones en otra pestaña (Google Docs, etc.).
 
         Flujo:
-        1. OCR de la pantalla actual (scroll para capturar varias páginas)
-        2. Enviar el contenido al LLM para resolver
-        3. Cambiar a la pestaña del documento
-        4. Escribir las soluciones con type_long_text
+        1. Minimizar ventana de JARVIS para dejar el PDF visible
+        2. Cerrar overlays (Escape) y hacer clic en el PDF para foco
+        3. OCR de la pantalla (sin truncar) + scroll para capturar más
+        4. Restaurar JARVIS, enviar al LLM
+        5. Cambiar a pestaña destino, escribir soluciones
 
         Args:
             target_tab: "next" o "previous" — dirección de la pestaña destino.
         """
+        import pyautogui
         sc = self.modules.get("system_control")
         if not sc:
             return "Módulo de control del sistema no disponible."
 
         try:
-            # 1. Leer la pantalla actual (PDF) — scroll para capturar más contenido
+            # 1. MINIMIZAR la ventana de JARVIS para que no tape el PDF
+            logger.info("Minimizando JARVIS para capturar pantalla...")
+            self._minimize_jarvis_window()
+            time.sleep(1.0)  # Esperar a que se minimice completamente
+
+            # 2. Cerrar overlays/popups que puedan tapar el PDF
+            #    (Adobe Acrobat overlay, banners, etc.)
+            pyautogui.press('escape')
+            time.sleep(0.5)
+            # Clic en el centro de la pantalla para dar foco al contenido del PDF
+            screen_w, screen_h = pyautogui.size()
+            pyautogui.click(screen_w // 2, screen_h // 2)
+            time.sleep(0.5)
+
+            # 3. Leer la pantalla actual (PDF) — OCR sin truncar
             logger.info("Leyendo ejercicios de la pantalla vía OCR...")
             all_text_parts = []
 
             # Primera captura (lo que se ve ahora)
-            screen_text = sc.get_screen_text()
-            if screen_text and not screen_text.startswith("No se"):
+            screen_text = sc.get_screen_text_full()
+            if screen_text and len(screen_text.strip()) > 20:
                 all_text_parts.append(screen_text)
+                logger.info(f"Captura inicial: {len(screen_text)} caracteres")
 
-            # Scroll hacia abajo y capturar más páginas (hasta 5 scrolls)
-            for i in range(5):
-                import pyautogui
+            # Scroll hacia abajo y capturar más páginas (hasta 8 scrolls)
+            for i in range(8):
                 pyautogui.scroll(-5)  # Scroll down
-                time.sleep(1.0)  # Esperar a que se renderice
+                time.sleep(1.5)  # Esperar renderizado (PDFs en browser son lentos)
 
-                new_text = sc.get_screen_text()
-                if not new_text or new_text.startswith("No se"):
+                new_text = sc.get_screen_text_full()
+                if not new_text or len(new_text.strip()) < 20:
                     break
 
-                # Evitar duplicados: solo agregar si hay texto nuevo significativo
-                # Comprobamos si las últimas 50 chars del texto anterior aparecen
-                # al principio del nuevo texto
+                # Evitar duplicados: comprobar overlap con texto anterior
                 if all_text_parts:
-                    last_chunk = all_text_parts[-1][-100:] if len(all_text_parts[-1]) > 100 else all_text_parts[-1]
-                    # Si más del 70% del nuevo texto ya lo teníamos, hemos llegado al final
-                    overlap = sum(1 for line in new_text.split('\n')
-                                  if line.strip() and line.strip() in last_chunk)
-                    total_lines = len([l for l in new_text.split('\n') if l.strip()])
-                    if total_lines > 0 and overlap / total_lines > 0.7:
-                        logger.info(f"Scroll {i+1}: texto repetido, fin del documento")
-                        break
+                    prev_lines = set(l.strip() for l in all_text_parts[-1].split('\n') if l.strip())
+                    new_lines = [l.strip() for l in new_text.split('\n') if l.strip()]
+                    if new_lines:
+                        overlap_count = sum(1 for l in new_lines if l in prev_lines)
+                        overlap_ratio = overlap_count / len(new_lines)
+                        if overlap_ratio > 0.6:
+                            logger.info(f"Scroll {i+1}: >60% texto repetido, fin")
+                            break
+                        # Solo agregar líneas nuevas
+                        unique_lines = [l for l in new_lines if l not in prev_lines]
+                        if unique_lines:
+                            all_text_parts.append('\n'.join(unique_lines))
+                            logger.info(f"Scroll {i+1}: +{len(unique_lines)} líneas nuevas")
+                        continue
 
                 all_text_parts.append(new_text)
-                logger.info(f"Scroll {i+1}: capturadas {len(new_text)} caracteres más")
+                logger.info(f"Scroll {i+1}: +{len(new_text)} caracteres")
+
+            # 4. Restaurar ventana de JARVIS
+            self._restore_jarvis_window()
 
             if not all_text_parts:
-                return "No pude leer texto en la pantalla, señor. ¿El PDF está visible?"
+                return (
+                    "No pude leer texto en la pantalla, señor. "
+                    "Asegúrese de que el PDF esté visible y abierto en la pestaña activa."
+                )
 
             # Combinar todo el texto capturado
             full_content = "\n\n".join(all_text_parts)
 
-            # Limpiar duplicados entre secciones (overlap simple)
             # Truncar si es excesivamente largo para el LLM
-            if len(full_content) > 12000:
-                full_content = full_content[:12000] + "\n[... texto truncado ...]"
+            if len(full_content) > 15000:
+                full_content = full_content[:15000] + "\n[... texto truncado ...]"
 
             logger.info(f"Contenido total capturado: {len(full_content)} caracteres")
 
-            # 2. Enviar al LLM para resolver
+            # 5. Enviar al LLM para resolver
             solving_prompt = (
                 "A continuación tienes ejercicios capturados de un documento PDF. "
                 "Resuélvelos todos de forma clara y ordenada. "
@@ -618,30 +643,74 @@ class Orchestrator:
 
             logger.info(f"Soluciones generadas: {len(solutions)} caracteres")
 
-            # 3. Cambiar a la pestaña del documento (Google Docs, Word Online, etc.)
+            # 6. Minimizar JARVIS de nuevo para escribir en el documento
+            self._minimize_jarvis_window()
+            time.sleep(0.5)
+
+            # 7. Cambiar a la pestaña del documento (Google Docs, Word Online, etc.)
             logger.info(f"Cambiando a pestaña {target_tab}...")
             sc.switch_tab(target_tab)
             time.sleep(2.0)  # Esperar a que la pestaña cargue
 
-            # 4. Hacer clic en el cuerpo del documento para asegurar el foco
-            # En Google Docs, hacer clic en el centro de la pantalla
-            import pyautogui
-            screen_w, screen_h = pyautogui.size()
+            # 8. Hacer clic en el cuerpo del documento para asegurar el foco
             pyautogui.click(screen_w // 2, screen_h // 2)
-            time.sleep(0.5)
+            time.sleep(1.0)
 
-            # 5. Escribir las soluciones
+            # 9. Escribir las soluciones
             logger.info("Escribiendo soluciones en el documento...")
             result = sc.type_long_text(solutions)
 
+            # 10. Restaurar JARVIS
+            self._restore_jarvis_window()
+
             return (
-                f"Ejercicios resueltos y escritos en el documento. "
-                f"({len(solutions)} caracteres). {result}"
+                f"Ejercicios resueltos y escritos en el documento, señor. "
+                f"({len(solutions)} caracteres)."
             )
 
         except Exception as e:
             logger.error(f"Error en solve_screen_exercises: {e}")
+            self._restore_jarvis_window()  # Asegurar que JARVIS vuelve
             return f"Error al resolver ejercicios de pantalla: {e}"
+
+    def _minimize_jarvis_window(self):
+        """Minimiza la ventana de JARVIS para no tapar la pantalla."""
+        try:
+            import ctypes
+            import ctypes.wintypes
+
+            user32 = ctypes.windll.user32
+            from config import HUD_WINDOW_TITLE
+
+            # Buscar ventana por título
+            hwnd = user32.FindWindowW(None, HUD_WINDOW_TITLE)
+            if hwnd:
+                SW_MINIMIZE = 6
+                user32.ShowWindow(hwnd, SW_MINIMIZE)
+                logger.info(f"Ventana '{HUD_WINDOW_TITLE}' minimizada")
+            else:
+                # Fallback: Alt+Tab para cambiar a otra ventana
+                import pyautogui
+                pyautogui.hotkey('alt', 'tab')
+                logger.warning("No se encontró ventana JARVIS, usando Alt+Tab")
+        except Exception as e:
+            logger.warning(f"Error minimizando JARVIS: {e}")
+
+    def _restore_jarvis_window(self):
+        """Restaura la ventana de JARVIS después de capturar pantalla."""
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            from config import HUD_WINDOW_TITLE
+
+            hwnd = user32.FindWindowW(None, HUD_WINDOW_TITLE)
+            if hwnd:
+                SW_RESTORE = 9
+                user32.ShowWindow(hwnd, SW_RESTORE)
+                user32.SetForegroundWindow(hwnd)
+                logger.info(f"Ventana '{HUD_WINDOW_TITLE}' restaurada")
+        except Exception as e:
+            logger.warning(f"Error restaurando JARVIS: {e}")
 
     def read_and_answer(self, file_path: str, question: str = "") -> str:
         """
