@@ -49,9 +49,9 @@ BRAIN_MODE = "cloud"  # Cambiar a "local" si tienes buen hardware
 # Groq: https://console.groq.com/keys (gratis, rápido)
 # Gemini: https://aistudio.google.com/apikey (gratis, generoso)
 CLOUD_PROVIDER = "groq"  # "groq" o "gemini"
-GROQ_API_KEY = ""  # Tu API key de Groq (https://console.groq.com/keys)
+GROQ_API_KEY = ""  # Se carga desde data/config.json (usar: "configura api key groq TU_KEY")
 GROQ_MODEL = "llama-3.3-70b-versatile"  # Modelo Groq (gratis)
-GEMINI_API_KEY = ""  # Tu API key de Gemini (https://aistudio.google.com/apikey)
+GEMINI_API_KEY = ""  # Se carga desde data/config.json (usar: "configura api key gemini TU_KEY")
 GEMINI_MODEL = "gemini-2.0-flash"  # Modelo Gemini (gratis)
 
 # ─── Modelo de Visión Multimodal ─────────────────────────────
@@ -67,7 +67,12 @@ Puedes: gestionar archivos, controlar sistema/volumen/brillo, buscar en web, env
 Reglas:
 - Sé breve. No des explicaciones largas salvo que te lo pidan.
 - Si fallas: "Me temo que no he podido completar esa tarea, señor."
+- IMPORTANTE: NUNCA digas que has ejecutado una acción física (pegar, escribir, abrir, hacer clic, copiar) a menos que hayas generado una etiqueta [ACTION]. Tú eres un modelo de texto, NO puedes interactuar con el sistema directamente. No inventes que has hecho cosas.
+- Si el usuario te pide hacer algo físico (pegar texto, abrir apps, hacer clic) y no sabes cómo generar el ACTION, responde: "Voy a intentar hacerlo, señor." o sugiere qué hacer, pero NUNCA afirmes que ya se hizo.
 - Para acciones del sistema usa: [ACTION:{"module":"nombre","function":"funcion","params":{}}]
+  Ejemplos:
+  [ACTION:{"module":"system_control","function":"type_long_text","params":{"text":"contenido"}}]
+  [ACTION:{"module":"system_control","function":"open_application","params":{"app_name":"chrome"}}]
 - Puedes mantener conversaciones naturales. Responde a preguntas generales con tu conocimiento.
 """
 
@@ -205,3 +210,11 @@ def get_config_value(key: str, default=None):
 
 # Cargar configuración al importar
 USER_CONFIG = load_config()
+
+# ─── Cargar API keys desde config.json (nunca hardcodear en source) ──
+# Si el usuario configuró su key con "configura api key groq/gemini XXX",
+# se carga aquí. Si no, queda vacío y JARVIS pedirá que la configure.
+if USER_CONFIG.get("groq_api_key"):
+    GROQ_API_KEY = USER_CONFIG["groq_api_key"]
+if USER_CONFIG.get("gemini_api_key"):
+    GEMINI_API_KEY = USER_CONFIG["gemini_api_key"]

@@ -250,14 +250,23 @@ class Orchestrator:
             if result:
                 action_results.append(result)
 
+        # Paso 3b: Safety net — detectar si el LLM afirmó haber hecho algo
+        # sin generar ACTION tags (alucinación de acción)
+        if not llm_intents:
+            fallback_result = self._detect_and_fix_hallucinated_action(
+                user_input, llm_response
+            )
+            if fallback_result:
+                action_results.append(fallback_result)
+
         # Paso 4: Limpiar y devolver respuesta
         clean_response = self.brain.clean_response(llm_response)
 
         # Si hubo acciones ejecutadas, agregar info
         if action_results:
             extra_info = " | ".join(action_results)
-            if extra_info not in clean_response:
-                clean_response += f"\n\n[Resultado: {extra_info}]"
+            # Reemplazar la respuesta falsa del LLM por confirmación real
+            clean_response = f"Hecho, señor. {extra_info}"
 
         self.memory.save_message("assistant", clean_response)
         return clean_response
@@ -343,6 +352,47 @@ class Orchestrator:
         return None
 
     # ─── Helpers ──────────────────────────────────────────────
+
+    def _detect_and_fix_hallucinated_action(
+        self, user_input: str, llm_response: str
+    ) -> Optional[str]:
+        """
+        Safety net: detecta cuando el LLM afirma haber ejecutado una acción
+        física (pegar, escribir, abrir) sin haber generado ACTION tags.
+        Si el usuario pidió pegar/escribir, lo ejecuta realmente.
+
+        Returns:
+            Resultado de la acción ejecutada, o None si no aplica.
+        """
+        # ¿El usuario pidió una acción de pegar/escribir/insertar?
+        paste_request = re.search(
+            r"(?:pega|pegar|paste|mete|meter|inserta|insertar|pon|poner)\s+"
+            r"(?:la\s+)?(?:respuesta|eso|esto|el\s+texto|lo\s+anterior|lo|la)"
+            r"|(?:p[eé]gal[oa]|escr[ií]bel[oa]|p[oó]nl[oa]|m[eé]tel[oa]|ins[eé]rtal[oa])"
+            r"|(?:pega|mete|pon|escribe|inserta)\s+(?:en\s+el\s+documento|ah[ií]|aqu[ií])",
+            user_input, re.IGNORECASE
+        )
+
+        if not paste_request:
+            return None
+
+        # ¿El LLM afirmó falsamente haberlo hecho?
+        false_claim = re.search(
+            r"(?:ha\s+sido|fue|he)\s+(?:pegad|insertad|escrit|colocad|puest)"
+            r"|(?:respuest|text|contenid)\w*\s+(?:ha\s+sido\s+)?(?:pegad|insertad|escrit|colocad)"
+            r"|(?:listo|hecho).*(?:pegad|insertad|escrit)"
+            r"|(?:ya\s+(?:est[aá]|qued[oó]|se\s+ha)\s+(?:pegad|insertad|escrit|puest))",
+            llm_response, re.IGNORECASE
+        )
+
+        if false_claim:
+            logger.warning(
+                "LLM alucinó una acción de pegado. Ejecutando realmente..."
+            )
+            result = self.paste_last_response()
+            return result
+
+        return None
 
     def _build_context(self, include_screen: bool = False) -> str:
         """Construye contexto adicional para el LLM."""
@@ -587,6 +637,49 @@ class Orchestrator:
             logger.warning(f"No se pudo guardar API key: {e}")
 
         return f"API key de {provider} configurada correctamente, señor."
+
+    def paste_last_response(self) -> str:
+        """
+        Pega la última respuesta del asistente en la aplicación activa.
+        Usa type_long_text para escribir el texto via portapapeles+Ctrl+V.
+        """
+        try:
+            # Obtener mensajes recientes
+            messages = self.memory.get_recent_messages(limit=20)
+
+            # Encontrar la última respuesta del asistente
+            last_response = None
+            for msg in reversed(messages):
+                if msg["role"] == "assistant":
+                    candidate = msg["content"]
+                    # Saltar respuestas meta/sistema (saludos, confirmaciones cortas)
+                    if candidate and len(candidate) > 30 and not candidate.startswith(("Hecho, señor", "No he escuchado")):
+                        last_response = candidate
+                        break
+                    elif candidate and not last_response:
+                        last_response = candidate
+
+            if not last_response:
+                return "No tengo una respuesta previa para pegar, señor."
+
+            # Limpiar meta-texto de JARVIS
+            clean = re.sub(r"^\s*Hecho, señor\.?\s*", "", last_response)
+            clean = re.sub(r"\s*\[Resultado:.*?\]\s*$", "", clean)
+            clean = clean.strip()
+
+            if not clean:
+                return "La última respuesta está vacía, señor."
+
+            # Escribir en la app activa
+            sc = self.modules.get("system_control")
+            if sc:
+                result = sc.type_long_text(clean)
+                return f"Respuesta pegada en la aplicación activa ({len(clean)} caracteres)."
+
+            return "No pude acceder al módulo de control del sistema."
+        except Exception as e:
+            logger.error(f"Error pegando última respuesta: {e}")
+            return f"Error al pegar la respuesta: {e}"
 
     def get_module(self, name: str):
         """Obtiene un módulo por nombre."""

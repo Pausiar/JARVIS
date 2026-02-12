@@ -393,6 +393,70 @@ class CommandParser:
                 "system_control", "click_on_text",
                 lambda m: {"text": m.group(1).strip()},
             ),
+            # ─── Pegar / escribir la última respuesta en app activa ──
+            # Estos patrones DEBEN ir ANTES del genérico "escribe X"
+            # para evitar que "escribe la respuesta ahí" se interprete
+            # como type_in_app(text="la respuesta ahí")
+            (
+                re.compile(
+                    r"(?:pega|pegar|paste|mete|meter|inserta|insertar|pon|poner)\s+"
+                    r"(?:la\s+)?(?:respuesta|eso|esto|el\s+texto|lo\s+(?:anterior|que\s+dijiste|que\s+me\s+dijiste))\s*"
+                    r"(?:en\s+(?:el\s+)?(?:documento|doc|word|google\s*docs?|archivo|editor|bloc|app|aplicaci[oó]n))?\s*"
+                    r"(?:ah[ií]|aqu[ií]|all[ií])?\s*$",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "paste_last_response",
+                lambda m: {},
+            ),
+            (
+                re.compile(
+                    r"(?:p[eé]gal[oa]|escr[ií]bel[oa]|p[oó]nl[oa]|m[eé]tel[oa]|ins[eé]rtal[oa])\s*"
+                    r"(?:en\s+(?:el\s+)?(?:documento|doc|word|google\s*docs?|archivo|editor|bloc))?\s*"
+                    r"(?:ah[ií]|aqu[ií]|all[ií])?\s*$",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "paste_last_response",
+                lambda m: {},
+            ),
+            (
+                re.compile(
+                    r"(?:pega|pegar|paste|mete|meter|inserta|insertar|pon|poner)\s*"
+                    r"(?:la|lo|el|le|me|se)?\s*"
+                    r"(?:en\s+(?:el\s+)?(?:documento|doc|word|google\s*docs?|archivo|editor|bloc))\s*$",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "paste_last_response",
+                lambda m: {},
+            ),
+            (
+                re.compile(
+                    r"(?:ahora\s+)?(?:pega|mete|pon|inserta|escribe)\s*"
+                    r"(?:la|lo|el|eso|esto)?\s*"
+                    r"(?:ah[ií]|aqu[ií]|all[ií])\s*$",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "paste_last_response",
+                lambda m: {},
+            ),
+            (
+                re.compile(
+                    r"(?:escribe|escribir)\s+(?:la\s+)?(?:respuesta|eso|esto|lo\s+anterior|lo\s+que\s+dijiste)\s+"
+                    r"(?:en\s+(?:el\s+)?(?:documento|doc|word|google\s*docs?|archivo|editor|bloc)\s*)?"
+                    r"(?:ah[ií]|aqu[ií]|all[ií])?\s*$",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "paste_last_response",
+                lambda m: {},
+            ),
+            (
+                re.compile(
+                    r"(?:pega|paste)\s+(?:ah[ií]|aqu[ií]|all[ií])\s*$",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "paste_last_response",
+                lambda m: {},
+            ),
+            # ───────────────────────────────────────────────────────
             (
                 re.compile(
                     r"(?:escribe|escribir|type|teclea|teclear)\s+(?:en\s+\w+\s+)?[\"']?(.+?)[\"']?\s*$",
@@ -1062,6 +1126,7 @@ class CommandParser:
             r"|resuelve|resolver|soluciona|completa|contesta|responde"
             r"|enfoca|enfocar|cambia|minimiza|maximiza"
             r"|copia|copiar|lee|leer|describe"
+            r"|pega|pegar|paste|mete|meter|inserta|insertar"
             r"|reproduce|reproducir|play|pausa|pausar|pause|para|parar"
             r"|siguiente|next|anterior|previous|prev|pasa|skip"
             r"|silencia|silenciar|mutea|mutear"
