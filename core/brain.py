@@ -317,6 +317,17 @@ class JarvisBrain:
     def _chat_groq(self, messages: list[dict], api_key: str) -> str:
         """Chat con Groq API (formato OpenAI-compatible)."""
         try:
+            # Calcular max_tokens dinámicamente:
+            # - Mensajes largos (ejercicios, documentos) → necesitan respuestas largas
+            # - Chat normal → 1024 es suficiente
+            user_content = messages[-1].get("content", "") if messages else ""
+            if len(user_content) > 2000:
+                max_tokens = 4096  # Respuesta larga para ejercicios/documentos
+                timeout = 60  # Más tiempo para respuestas largas
+            else:
+                max_tokens = 1024
+                timeout = 30
+
             resp = requests.post(
                 self.CLOUD_ENDPOINTS["groq"],
                 headers={
@@ -327,9 +338,9 @@ class JarvisBrain:
                     "model": self.groq_model,
                     "messages": messages,
                     "temperature": 0.7,
-                    "max_tokens": 1024,
+                    "max_tokens": max_tokens,
                 },
-                timeout=30,
+                timeout=timeout,
             )
 
             if resp.status_code == 200:

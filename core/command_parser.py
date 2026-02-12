@@ -132,6 +132,48 @@ class CommandParser:
 
         # ─── Resolución de ejercicios (workflow multi-paso) ───
         patterns.extend([
+            # ─── Resolver ejercicios de PANTALLA/PESTAÑA y escribir en documento ──
+            # "resuelve los ejercicios del PDF y escríbelos en el documento de Google"
+            # "haz los ejercicios de la pantalla y ponlos en la otra pestaña"
+            # "resuelve lo que hay en la pestaña del PDF y mételo en el documento"
+            (
+                re.compile(
+                    r"(?:resuelve|resolver|haz|hacer|soluciona|solucionar|completa|completar)\s+"
+                    r"(?:(?:los?|el)\s+)?(?:ejercicios?|preguntas?|problemas?|actividades?)\s+"
+                    r"(?:(?:del?|que\s+hay\s+en)\s+)?(?:(?:la\s+)?(?:pantalla|pestaña|p[aá]gina|ventana)|(?:el\s+)?pdf|(?:ese|este|el)\s+pdf)\s*"
+                    r"(?:(?:y\s+)?(?:escr[ií]be|pon|mete|pega|p[oó]n|inserta)(?:los?|las?|l[oa])?\s+"
+                    r"(?:en\s+)?(?:el\s+|la\s+|otra?\s+)?(?:documento|google\s*docs?|doc|pestaña|word|hoja))?",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "solve_screen_exercises",
+                lambda m: {"target_tab": "next"},
+            ),
+            # "resuelve los ejercicios y ponlos en el documento"
+            # (sin especificar "del PDF" — asume que el PDF está en pantalla)
+            (
+                re.compile(
+                    r"(?:resuelve|resolver|haz|hacer|soluciona)\s+"
+                    r"(?:(?:los?|el)\s+)?(?:ejercicios?|preguntas?|problemas?)\s+"
+                    r"(?:y\s+)?(?:escr[ií]be|pon|mete|pega|p[oó]n|inserta)(?:los?|las?|l[oa])?\s+"
+                    r"(?:en\s+)?(?:el\s+|la\s+|otra?\s+)?(?:documento|google\s*docs?|doc|pestaña|word|hoja)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "solve_screen_exercises",
+                lambda m: {"target_tab": "next"},
+            ),
+            # "resuelve lo que hay en pantalla y escríbelo en la otra pestaña"
+            (
+                re.compile(
+                    r"(?:resuelve|resolver|haz|hacer|soluciona)\s+"
+                    r"(?:lo\s+que\s+(?:hay|ves?|se\s+ve|aparece)\s+(?:en\s+)?(?:la\s+)?(?:pantalla|pestaña)|esto|eso)\s*"
+                    r"(?:(?:y\s+)?(?:escr[ií]be|pon|mete|pega|inserta)(?:lo|los?|las?|l[oa])?\s+"
+                    r"(?:en\s+)?(?:el\s+|la\s+|otra?\s+)?(?:documento|google\s*docs?|doc|pestaña|word|hoja))?",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "solve_screen_exercises",
+                lambda m: {"target_tab": "next"},
+            ),
+            # ─── Resolver ejercicios de ARCHIVO local ──
             (
                 re.compile(
                     r"(?:resuelve|resolver|haz|hacer|soluciona|solucionar|completa|completar)\s+"

@@ -527,6 +527,122 @@ class Orchestrator:
             logger.error(f"Error resolviendo ejercicios: {e}")
             return f"Error al resolver ejercicios: {e}"
 
+    def solve_screen_exercises(self, target_tab: str = "next") -> str:
+        """
+        Lee ejercicios de la pantalla actual (PDF en navegador), los resuelve
+        con el LLM, y escribe las soluciones en otra pestaña (Google Docs, etc.).
+
+        Flujo:
+        1. OCR de la pantalla actual (scroll para capturar varias páginas)
+        2. Enviar el contenido al LLM para resolver
+        3. Cambiar a la pestaña del documento
+        4. Escribir las soluciones con type_long_text
+
+        Args:
+            target_tab: "next" o "previous" — dirección de la pestaña destino.
+        """
+        sc = self.modules.get("system_control")
+        if not sc:
+            return "Módulo de control del sistema no disponible."
+
+        try:
+            # 1. Leer la pantalla actual (PDF) — scroll para capturar más contenido
+            logger.info("Leyendo ejercicios de la pantalla vía OCR...")
+            all_text_parts = []
+
+            # Primera captura (lo que se ve ahora)
+            screen_text = sc.get_screen_text()
+            if screen_text and not screen_text.startswith("No se"):
+                all_text_parts.append(screen_text)
+
+            # Scroll hacia abajo y capturar más páginas (hasta 5 scrolls)
+            for i in range(5):
+                import pyautogui
+                pyautogui.scroll(-5)  # Scroll down
+                time.sleep(1.0)  # Esperar a que se renderice
+
+                new_text = sc.get_screen_text()
+                if not new_text or new_text.startswith("No se"):
+                    break
+
+                # Evitar duplicados: solo agregar si hay texto nuevo significativo
+                # Comprobamos si las últimas 50 chars del texto anterior aparecen
+                # al principio del nuevo texto
+                if all_text_parts:
+                    last_chunk = all_text_parts[-1][-100:] if len(all_text_parts[-1]) > 100 else all_text_parts[-1]
+                    # Si más del 70% del nuevo texto ya lo teníamos, hemos llegado al final
+                    overlap = sum(1 for line in new_text.split('\n')
+                                  if line.strip() and line.strip() in last_chunk)
+                    total_lines = len([l for l in new_text.split('\n') if l.strip()])
+                    if total_lines > 0 and overlap / total_lines > 0.7:
+                        logger.info(f"Scroll {i+1}: texto repetido, fin del documento")
+                        break
+
+                all_text_parts.append(new_text)
+                logger.info(f"Scroll {i+1}: capturadas {len(new_text)} caracteres más")
+
+            if not all_text_parts:
+                return "No pude leer texto en la pantalla, señor. ¿El PDF está visible?"
+
+            # Combinar todo el texto capturado
+            full_content = "\n\n".join(all_text_parts)
+
+            # Limpiar duplicados entre secciones (overlap simple)
+            # Truncar si es excesivamente largo para el LLM
+            if len(full_content) > 12000:
+                full_content = full_content[:12000] + "\n[... texto truncado ...]"
+
+            logger.info(f"Contenido total capturado: {len(full_content)} caracteres")
+
+            # 2. Enviar al LLM para resolver
+            solving_prompt = (
+                "A continuación tienes ejercicios capturados de un documento PDF. "
+                "Resuélvelos todos de forma clara y ordenada. "
+                "Para cada ejercicio:\n"
+                "- Indica el número del ejercicio\n"
+                "- Escribe la respuesta completa\n"
+                "- Si es matemática, muestra el procedimiento paso a paso\n"
+                "- Si es de programación, escribe el código completo\n"
+                "- Si es de redacción, escribe la respuesta desarrollada\n\n"
+                "EJERCICIOS CAPTURADOS:\n" + full_content
+            )
+
+            logger.info("Enviando ejercicios al LLM para resolverlos...")
+            solutions = self.brain.chat(
+                solving_prompt,
+                context="Resolviendo ejercicios capturados de pantalla"
+            )
+
+            if not solutions or solutions.startswith(("Me temo", "No he podido")):
+                return "No pude resolver los ejercicios. " + (solutions or "")
+
+            logger.info(f"Soluciones generadas: {len(solutions)} caracteres")
+
+            # 3. Cambiar a la pestaña del documento (Google Docs, Word Online, etc.)
+            logger.info(f"Cambiando a pestaña {target_tab}...")
+            sc.switch_tab(target_tab)
+            time.sleep(2.0)  # Esperar a que la pestaña cargue
+
+            # 4. Hacer clic en el cuerpo del documento para asegurar el foco
+            # En Google Docs, hacer clic en el centro de la pantalla
+            import pyautogui
+            screen_w, screen_h = pyautogui.size()
+            pyautogui.click(screen_w // 2, screen_h // 2)
+            time.sleep(0.5)
+
+            # 5. Escribir las soluciones
+            logger.info("Escribiendo soluciones en el documento...")
+            result = sc.type_long_text(solutions)
+
+            return (
+                f"Ejercicios resueltos y escritos en el documento. "
+                f"({len(solutions)} caracteres). {result}"
+            )
+
+        except Exception as e:
+            logger.error(f"Error en solve_screen_exercises: {e}")
+            return f"Error al resolver ejercicios de pantalla: {e}"
+
     def read_and_answer(self, file_path: str, question: str = "") -> str:
         """
         Lee un documento y responde preguntas sobre su contenido.
