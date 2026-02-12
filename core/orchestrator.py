@@ -210,15 +210,36 @@ class Orchestrator:
                 return response
 
         # Paso 2: Usar el LLM para entender la petición
-        # Detectar si el usuario se refiere a lo que hay en pantalla
+        # Detectar si el usuario EXPLÍCITAMENTE pide leer/ver la pantalla
+        # Solo cuando el usuario hace una pregunta directa sobre lo que hay
+        # en pantalla. NO activar por menciones casuales de "pantalla".
         needs_screen = bool(re.search(
-            r"(?:qu[eé]|que)\s+(?:hay|pone|dice|se\s+ve|aparece)"
-            r"|(?:en\s+)?(?:la\s+)?pantalla"
-            r"|(?:lee|leer|dime)\s+(?:lo\s+que|qu[eé]|que)\s+(?:hay|pone|dice)"
-            r"|(?:describe|describir)\s+(?:lo\s+que|la)\s+(?:pantalla|se\s+ve)",
+            r"(?:qu[eé]|que)\s+(?:hay|pone|dice|se\s+ve|aparece)\s+(?:en\s+)?(?:la\s+)?(?:pantalla|la\s+pantalla)"
+            r"|(?:lee|leer|dime)\s+(?:lo\s+que|qu[eé]|que)\s+(?:hay|pone|dice|se\s+ve)\s+(?:en\s+)?(?:la\s+)?pantalla"
+            r"|(?:describe|describir)\s+(?:lo\s+que|la)\s+(?:pantalla|se\s+ve\s+en\s+pantalla)"
+            r"|(?:lee|leer)\s+(?:la\s+)?pantalla"
+            r"|(?:qu[eé]|que)\s+(?:hay|pone|dice)\s+(?:aqu[ií]|ah[ií])",
             user_input, re.IGNORECASE
         ))
-        context = self._build_context(include_screen=needs_screen)
+
+        # Detectar si es una pregunta conversacional simple (no necesita contexto pesado)
+        is_simple_chat = bool(re.search(
+            r"^(?:cu[eé]ntame|dime|sabes|conoces|qu[eé]\s+(?:es|son|significa|opinas)|"
+            r"c[oó]mo\s+(?:est[aá]s|funciona|se\s+hace)|"
+            r"por\s+qu[eé]|qui[eé]n|cu[aá]ndo|cu[aá]nto|d[oó]nde|"
+            r"haz(?:me)?\s+(?:un|una)\s+(?:chiste|broma|historia|resumen)|"
+            r"explica|define|traduce|escribe|recomienda|sugiere|"
+            r"cu[aá]l\s+es|hab[ií]a\s+una\s+vez|hab[ií]a|"
+            r"hola|hey|oye|mira|a\s+ver)",
+            user_input, re.IGNORECASE
+        ))
+
+        # Para chat simple, contexto mínimo. Para pantalla, incluir OCR.
+        if is_simple_chat and not needs_screen:
+            context = self._build_context_minimal()
+        else:
+            context = self._build_context(include_screen=needs_screen)
+
         llm_response = self.brain.chat(user_input, context=context)
 
         # Paso 3: Extraer y ejecutar acciones del LLM
@@ -330,21 +351,13 @@ class Orchestrator:
         # Hora y fecha
         now = datetime.datetime.now()
         context_parts.append(
-            f"Fecha y hora actual: {now.strftime('%d/%m/%Y %H:%M:%S')}"
+            f"Fecha: {now.strftime('%d/%m/%Y %H:%M')}"
         )
 
         # Info del usuario
         user_name = self.memory.get_preference("user_name")
         if user_name:
-            context_parts.append(f"Nombre del usuario: {user_name}")
-
-        # Conversaciones recientes (resumen)
-        recent = self.memory.get_recent_messages(5)
-        if recent:
-            context_parts.append(
-                "Mensajes recientes:\n"
-                + "\n".join(f"- {m['role']}: {m['content'][:100]}" for m in recent)
-            )
+            context_parts.append(f"Usuario: {user_name}")
 
         # Contexto visual de pantalla (si se solicita)
         if include_screen:
@@ -353,15 +366,20 @@ class Orchestrator:
                 try:
                     screen_text = sc.get_screen_text()
                     if screen_text and not screen_text.startswith("No se"):
-                        if len(screen_text) > 3000:
-                            screen_text = screen_text[:3000] + "\n[... texto truncado ...]"
+                        if len(screen_text) > 2000:
+                            screen_text = screen_text[:2000] + "\n[... truncado ...]"
                         context_parts.append(
-                            f"Texto visible en la pantalla actual:\n{screen_text}"
+                            f"Pantalla:\n{screen_text}"
                         )
                 except Exception as e:
                     logger.warning(f"Error obteniendo contexto de pantalla: {e}")
 
         return "\n".join(context_parts)
+
+    def _build_context_minimal(self) -> str:
+        """Contexto mínimo para consultas conversacionales — solo fecha/hora."""
+        now = datetime.datetime.now()
+        return f"Fecha: {now.strftime('%d/%m/%Y %H:%M')}"
 
     def _enhance_response(self, user_input: str, action_result: str) -> str:
         """

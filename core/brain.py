@@ -51,9 +51,10 @@ class JarvisBrain:
                     "model": self.model,
                     "messages": [{"role": "user", "content": "Hola"}],
                     "stream": False,
+                    "keep_alive": "10m",
                     "options": {"num_predict": 1},
                 },
-                timeout=120,
+                timeout=180,  # Generoso para primera carga
             )
             self._warmed_up = resp.status_code == 200
             if self._warmed_up:
@@ -169,6 +170,8 @@ class JarvisBrain:
     def chat(self, user_message: str, context: str = "") -> str:
         """
         Envía un mensaje al LLM y obtiene la respuesta completa.
+        Usa timeout basado en inactividad (no en tiempo total) para
+        tolerar la carga lenta del modelo en hardware modesto.
 
         Args:
             user_message: Mensaje del usuario.
@@ -192,44 +195,77 @@ class JarvisBrain:
         messages = self._build_messages(full_message)
 
         try:
-            # Usar streaming interno para evitar timeout por bloqueo total
-            # El servidor empieza a devolver tokens de inmediato
             resp = requests.post(
                 f"{self.host}/api/chat",
                 json={
                     "model": self.model,
                     "messages": messages,
                     "stream": True,
+                    "keep_alive": "10m",  # Mantener modelo en RAM 10 min
                     "options": {
                         "temperature": 0.7,
                         "top_p": 0.9,
-                        "num_predict": 150,
-                        "num_ctx": 1024,
+                        "num_predict": 512,
+                        "num_ctx": 2048,
                     },
                 },
-                timeout=35,
+                timeout=120,  # HTTP timeout generoso para carga del modelo
                 stream=True,
             )
 
             if resp.status_code == 200:
                 assistant_message = ""
-                start_time = time.time()
-                max_total_seconds = 25  # Límite total para evitar bloqueos
+                last_token_time = time.time()
+                start_time = last_token_time
+                # Timeouts basados en INACTIVIDAD, no en tiempo total:
+                # - 60s sin recibir ningún token (carga del modelo)
+                # - 15s sin token nuevo una vez empezó a generar
+                # - 120s máximo absoluto como red de seguridad
+                idle_timeout_initial = 60   # Esperar hasta 60s al primer token
+                idle_timeout_streaming = 15  # 15s entre tokens una vez fluye
+                max_total_seconds = 120
+
+                has_started = False
+
                 for line in resp.iter_lines():
+                    now = time.time()
+
                     if line:
-                        data = json.loads(line)
+                        try:
+                            data = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
                         token = data.get("message", {}).get("content", "")
                         if token:
                             assistant_message += token
+                            last_token_time = now
+                            has_started = True
                         if data.get("done", False):
                             break
-                    # Abortar si tarda demasiado en total
-                    if time.time() - start_time > max_total_seconds:
-                        logger.warning(f"LLM: respuesta parcial tras {max_total_seconds}s")
+
+                    # Comprobar timeouts
+                    idle = now - last_token_time
+                    total = now - start_time
+
+                    if total > max_total_seconds:
+                        logger.warning(f"LLM: límite total de {max_total_seconds}s alcanzado")
                         resp.close()
                         break
 
+                    if has_started and idle > idle_timeout_streaming:
+                        logger.warning(f"LLM: sin tokens durante {idle:.0f}s (streaming)")
+                        resp.close()
+                        break
+
+                    if not has_started and idle > idle_timeout_initial:
+                        logger.warning(f"LLM: sin respuesta tras {idle:.0f}s esperando primer token")
+                        resp.close()
+                        break
+
+                elapsed = time.time() - start_time
+
                 if not assistant_message:
+                    logger.error(f"LLM: respuesta vacía tras {elapsed:.1f}s")
                     return "No he podido generar una respuesta, señor. Inténtelo de nuevo."
 
                 # Guardar en historial
@@ -240,7 +276,7 @@ class JarvisBrain:
                     {"role": "assistant", "content": assistant_message}
                 )
 
-                logger.info(f"Respuesta generada ({len(assistant_message)} chars)")
+                logger.info(f"Respuesta generada ({len(assistant_message)} chars, {elapsed:.1f}s)")
                 return assistant_message
             else:
                 error_msg = f"Error del LLM (HTTP {resp.status_code}): {resp.text}"
@@ -257,10 +293,10 @@ class JarvisBrain:
                 "¿Podría verificar que Ollama esté ejecutándose?"
             )
         except requests.Timeout:
-            logger.error("Timeout en la respuesta del LLM.")
+            logger.error("Timeout en la conexión HTTP con Ollama.")
             return (
-                "La solicitud ha tardado demasiado, señor. "
-                "Permítame intentarlo de nuevo si lo desea."
+                "La conexión con Ollama ha tardado demasiado, señor. "
+                "El modelo puede estar cargándose. Intente de nuevo en unos segundos."
             )
         except Exception as e:
             logger.error(f"Error inesperado en chat: {e}")
@@ -291,10 +327,12 @@ class JarvisBrain:
                     "model": self.model,
                     "messages": messages,
                     "stream": True,
+                    "keep_alive": "10m",
                     "options": {
                         "temperature": 0.7,
                         "top_p": 0.9,
                         "num_predict": 1024,
+                        "num_ctx": 2048,
                     },
                 },
                 timeout=120,

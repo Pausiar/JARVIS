@@ -354,11 +354,12 @@ class JarvisHUD(QMainWindow):
 
         self._worker_thread.start()
 
-        # Safety timeout: si el worker no responde en 45s, desbloquear UI
+        # Safety timeout: si el worker no responde en 150s, desbloquear UI
+        # (el modelo puede tardar hasta 120s en hardware lento)
         self._worker_timeout = QTimer()
         self._worker_timeout.setSingleShot(True)
         self._worker_timeout.timeout.connect(self._on_worker_timeout)
-        self._worker_timeout.start(45000)
+        self._worker_timeout.start(150000)
 
     def _set_input_enabled(self, enabled: bool):
         """Habilita o deshabilita todos los controles de entrada."""
@@ -400,9 +401,9 @@ class JarvisHUD(QMainWindow):
 
     @Slot()
     def _on_worker_timeout(self):
-        """Safety: si el worker no responde en 45s, desbloquear la UI."""
+        """Safety: si el worker no responde en 150s, desbloquear la UI."""
         if self._is_processing:
-            logger.warning("Worker timeout: desbloqueando UI tras 45s")
+            logger.warning("Worker timeout: desbloqueando UI tras 150s")
             self._is_processing = False
             self._add_assistant_message(
                 "La solicitud ha tardado demasiado, señor. Intente de nuevo."
