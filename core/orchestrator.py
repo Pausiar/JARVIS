@@ -527,20 +527,25 @@ class Orchestrator:
             logger.error(f"Error resolviendo ejercicios: {e}")
             return f"Error al resolver ejercicios: {e}"
 
-    def solve_screen_exercises(self, target_tab: str = "next") -> str:
+    def solve_screen_exercises(self, target_tab: str = "next",
+                                source_app: str = "", target_app: str = "",
+                                content_hint: str = "") -> str:
         """
-        Lee ejercicios de la pantalla actual (PDF en navegador), los resuelve
-        con el LLM, y escribe las soluciones en otra pestaña (Google Docs, etc.).
+        Lee ejercicios de una aplicación/pestaña (ej: Chrome con PDF), los resuelve
+        con el LLM, y escribe las soluciones en otra aplicación (ej: IntelliJ, Google Docs).
 
         Flujo:
-        1. Minimizar ventana de JARVIS para dejar el PDF visible
-        2. Cerrar overlays (Escape) y hacer clic en el PDF para foco
-        3. OCR de la pantalla (sin truncar) + scroll para capturar más
+        1. Enfocar la app/pestaña fuente (donde está el contenido a leer)
+        2. Minimizar JARVIS para capturar pantalla limpia
+        3. OCR de la pantalla + scroll para capturar más
         4. Restaurar JARVIS, enviar al LLM
-        5. Cambiar a pestaña destino, escribir soluciones
+        5. Enfocar la app/pestaña destino, escribir soluciones
 
         Args:
-            target_tab: "next" o "previous" — dirección de la pestaña destino.
+            target_tab: "next" o "previous" — dirección si se usa cambio de pestaña (fallback).
+            source_app: Nombre de la app fuente (ej: "google", "chrome", "pdf"). Vacío = pantalla actual.
+            target_app: Nombre de la app destino (ej: "intellij", "google docs", "word"). Vacío = siguiente pestaña.
+            content_hint: Pista de qué buscar (ej: "ejercicio 2", "actividad 3"). Vacío = todo.
         """
         import pyautogui
         sc = self.modules.get("system_control")
@@ -548,15 +553,20 @@ class Orchestrator:
             return "Módulo de control del sistema no disponible."
 
         try:
-            # 1. MINIMIZAR la ventana de JARVIS para que no tape el PDF
+            # 1. ENFOCAR la app/pestaña fuente si se especificó
+            if source_app:
+                logger.info(f"Enfocando app fuente: {source_app}")
+                focus_result = sc.focus_window(source_app)
+                logger.info(f"Focus result: {focus_result}")
+                time.sleep(1.5)  # Esperar a que la ventana se muestre
+
+            # 2. MINIMIZAR la ventana de JARVIS para que no tape el contenido
             logger.info("Minimizando JARVIS para capturar pantalla...")
             self._minimize_jarvis_window()
             time.sleep(2.0)  # Esperar a que se minimice completamente
 
-            # 2. Dar foco al contenido del PDF (clic en zona derecha, evitando sidebars)
+            # 3. Dar foco al contenido (clic en zona derecha, evitando sidebars)
             screen_w, screen_h = pyautogui.size()
-            # Clic en el 65% horizontal (evita sidebar izquierdo de Adobe/Chrome)
-            # y 40% vertical (zona de contenido, no toolbar ni footer)
             click_x = int(screen_w * 0.65)
             click_y = int(screen_h * 0.40)
             pyautogui.click(click_x, click_y)
@@ -623,16 +633,25 @@ class Orchestrator:
             logger.info(f"Contenido total capturado: {len(full_content)} caracteres")
 
             # 5. Enviar al LLM para resolver
+            hint_instruction = ""
+            if content_hint:
+                hint_instruction = (
+                    f"IMPORTANTE: El usuario ha pedido específicamente: '{content_hint}'. "
+                    f"Céntrate SOLO en eso del texto capturado. Si pide un ejercicio concreto "
+                    f"(ej: 'ejercicio 2'), resuelve SOLO ese ejercicio.\n\n"
+                )
+
             solving_prompt = (
-                "A continuación tienes ejercicios capturados de un documento PDF. "
-                "Resuélvelos todos de forma clara y ordenada. "
+                hint_instruction +
+                "A continuación tienes contenido capturado de la pantalla del usuario. "
+                "Resuélvelo de forma clara y ordenada. "
                 "Para cada ejercicio:\n"
                 "- Indica el número del ejercicio\n"
                 "- Escribe la respuesta completa\n"
                 "- Si es matemática, muestra el procedimiento paso a paso\n"
                 "- Si es de programación, escribe el código completo\n"
                 "- Si es de redacción, escribe la respuesta desarrollada\n\n"
-                "EJERCICIOS CAPTURADOS:\n" + full_content
+                "CONTENIDO CAPTURADO:\n" + full_content
             )
 
             logger.info("Enviando ejercicios al LLM para resolverlos...")
@@ -650,12 +669,19 @@ class Orchestrator:
             self._minimize_jarvis_window()
             time.sleep(0.5)
 
-            # 7. Cambiar a la pestaña del documento (Google Docs, Word Online, etc.)
-            logger.info(f"Cambiando a pestaña {target_tab}...")
-            sc.switch_tab(target_tab)
-            time.sleep(2.0)  # Esperar a que la pestaña cargue
+            # 7. Enfocar la app/pestaña destino
+            if target_app:
+                logger.info(f"Enfocando app destino: {target_app}")
+                focus_result = sc.focus_window(target_app)
+                logger.info(f"Focus destino: {focus_result}")
+                time.sleep(2.0)
+            else:
+                # Fallback: cambiar de pestaña en la misma app
+                logger.info(f"Cambiando a pestaña {target_tab}...")
+                sc.switch_tab(target_tab)
+                time.sleep(2.0)
 
-            # 8. Hacer clic en el cuerpo del documento para asegurar el foco
+            # 8. Hacer clic en el cuerpo del documento/editor para asegurar foco
             pyautogui.click(screen_w // 2, screen_h // 2)
             time.sleep(1.0)
 
@@ -666,8 +692,9 @@ class Orchestrator:
             # 10. Restaurar JARVIS
             self._restore_jarvis_window()
 
+            dest_name = target_app if target_app else "la siguiente pestaña"
             return (
-                f"Ejercicios resueltos y escritos en el documento, señor. "
+                f"Ejercicios resueltos y escritos en {dest_name}, señor. "
                 f"({len(solutions)} caracteres)."
             )
 

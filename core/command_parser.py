@@ -132,6 +132,84 @@ class CommandParser:
 
         # ─── Resolución de ejercicios (workflow multi-paso) ───
         patterns.extend([
+            # ─── NUEVO: Patrón flexible con app fuente y app destino ──
+            # "mira el ejercicio 2 en el tab de google y hazmelo en intellij"
+            # "lee el ejercicio 3 en chrome y escríbelo en word"
+            # "coge el ejercicio 1 de google y resuélvelo en intellij"
+            # "mira lo de google y ponlo en intellij"
+            (
+                re.compile(
+                    r"(?:mira|lee|coge|abre|ve)\s+"
+                    r"(.+?)\s+"
+                    r"(?:en\s+)?(?:el\s+)?(?:tab|pestaña|ventana)?\s*(?:de\s+|en\s+)"
+                    r"([\w]+(?:\s+[\w]+)?)\s+"
+                    r"y\s+(?:h[aá]zmelo|escr[ií]belo|resu[eé]lvelo|ponlo|m[eé]telo|h[aá]zlo|p[aá]samo)\s+"
+                    r"(?:en\s+)"
+                    r"([\w]+(?:\s+[\w]+)?)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "solve_screen_exercises",
+                lambda m: {
+                    "source_app": m.group(2).strip(),
+                    "target_app": m.group(3).strip(),
+                    "content_hint": m.group(1).strip(),
+                },
+            ),
+            # "resuelve el ejercicio 2 de google en intellij"
+            # "haz el ejercicio 5 de chrome en word"
+            (
+                re.compile(
+                    r"(?:resuelve|haz|soluciona|completa)\s+"
+                    r"(.+?)\s+"
+                    r"(?:de|del?|que\s+(?:hay|está?)\s+en)\s+"
+                    r"(\w+(?:\s+\w+)?)\s+"
+                    r"(?:en|y\s+(?:escr[ií]be|pon|mete|p[oó]n)(?:lo|los?)?\s+en)\s+"
+                    r"(\w+(?:\s+\w+)?)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "solve_screen_exercises",
+                lambda m: {
+                    "source_app": m.group(2).strip(),
+                    "target_app": m.group(3).strip(),
+                    "content_hint": m.group(1).strip(),
+                },
+            ),
+            # "mira lo que hay en google y hazmelo en intellij"
+            # "lee lo de chrome y escríbelo en word"
+            (
+                re.compile(
+                    r"(?:mira|lee|coge)\s+"
+                    r"(?:lo\s+(?:que\s+(?:hay|se\s+ve|está?|aparece)|del?)\s+)"
+                    r"(?:en\s+)?(\w+(?:\s+\w+)?)\s+"
+                    r"(?:y\s+)?(?:h[aá]zmelo|escr[ií]belo|resu[eé]lvelo|ponlo|m[eé]telo|h[aá]zlo|p[aá]samo)\s+"
+                    r"(?:en\s+)"
+                    r"(\w+(?:\s+\w+)?)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "solve_screen_exercises",
+                lambda m: {
+                    "source_app": m.group(1).strip(),
+                    "target_app": m.group(2).strip(),
+                    "content_hint": "",
+                },
+            ),
+            # "haz lo de google en intellij" / "resuelve lo de chrome en word"
+            (
+                re.compile(
+                    r"(?:haz|resuelve|soluciona|completa|pon|mete|escribe)\s+"
+                    r"(?:lo\s+(?:de|del?|que\s+(?:hay|está?)\s+en)\s+)"
+                    r"(\w+(?:\s+\w+)?)\s+"
+                    r"en\s+"
+                    r"(\w+(?:\s+\w+)?)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "solve_screen_exercises",
+                lambda m: {
+                    "source_app": m.group(1).strip(),
+                    "target_app": m.group(2).strip(),
+                    "content_hint": "",
+                },
+            ),
             # ─── Resolver ejercicios de PANTALLA/PESTAÑA y escribir en documento ──
             # "resuelve los ejercicios del PDF y escríbelos en el documento de Google"
             # "haz los ejercicios de la pantalla y ponlos en la otra pestaña"

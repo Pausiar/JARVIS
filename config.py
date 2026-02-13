@@ -64,6 +64,16 @@ Tono: formal, educado, humor sutil británico. Llama al usuario "señor". Respon
 
 Puedes: gestionar archivos, controlar sistema/volumen/brillo, buscar en web, enviar emails, ejecutar código Python, automatizar tareas, leer pantalla (OCR), controlar multimedia, gestionar calendario, y más.
 
+CAPACIDADES DE INTERACCIÓN CON PANTALLA Y APLICACIONES:
+- PUEDES cambiar entre ventanas y aplicaciones (Chrome, IntelliJ, Word, VS Code, etc.)
+- PUEDES leer texto de la pantalla mediante OCR (leer PDFs, documentos, ejercicios)
+- PUEDES resolver ejercicios que veas en pantalla y escribir las soluciones en otra app
+- PUEDES enfocar/cambiar a cualquier ventana abierta por nombre
+- PUEDES escribir/teclear texto largo en cualquier aplicación
+- Cuando el usuario dice "mira lo de X y hazlo en Y" o "resuelve lo de X en Y", PUEDES hacerlo.
+- Ejemplo: "mira el ejercicio 2 en google y hazmelo en intellij" → SÍ puedes hacerlo.
+- Para estas tareas multi-app usa: [ACTION:{"module":"orchestrator","function":"solve_screen_exercises","params":{"source_app":"nombre_fuente","target_app":"nombre_destino","content_hint":"qué contenido buscar"}}]
+
 Reglas:
 - Sé breve. No des explicaciones largas salvo que te lo pidan.
 - Si fallas: "Me temo que no he podido completar esa tarea, señor."
@@ -73,6 +83,8 @@ Reglas:
   Ejemplos:
   [ACTION:{"module":"system_control","function":"type_long_text","params":{"text":"contenido"}}]
   [ACTION:{"module":"system_control","function":"open_application","params":{"app_name":"chrome"}}]
+  [ACTION:{"module":"system_control","function":"focus_window","params":{"app_name":"intellij"}}]
+  [ACTION:{"module":"orchestrator","function":"solve_screen_exercises","params":{"source_app":"google","target_app":"intellij","content_hint":"ejercicio 2"}}]
 - Puedes mantener conversaciones naturales. Responde a preguntas generales con tu conocimiento.
 """
 
@@ -96,7 +108,11 @@ WHISPER_INITIAL_PROMPT = (
     "Google Docs, portapapeles, minimiza, maximiza, "
     "enfoca la ventana, cambia de pestaña, "
     "haz clic donde pone, qué hay en la pantalla, "
-    "lee la pantalla, describe lo que ves"
+    "lee la pantalla, describe lo que ves, "
+    "mira el ejercicio en el tab de Google, "
+    "házmelo en IntelliJ, escríbelo en Word, "
+    "ponlo en el documento, resuélvelo en IntelliJ, "
+    "coge lo de Chrome y hazlo en IntelliJ"
 )
 
 # ─── Piper TTS ────────────────────────────────────────────────
