@@ -134,19 +134,33 @@ REGLAS CLAVE DE NAVEGACIÓN WEB:
   scroll_page — hacer scroll (direction: "down" o "up")
 
 SUBIR ARCHIVOS EN WEBS (Moodle/Aules, Google Drive, etc.):
-Cuando el usuario pide "selecciona/sube/adjunta un archivo", sigue estos pasos:
-1. Haz clic en el botón o zona de subida de la web (en Moodle/Aules: el icono de archivo o la zona de "arrastra aquí").
-   - En Moodle, tras "Afig la tramesa", busca un icono de carpeta/archivo o el texto "Fitxers tramesos" / zona de drag-and-drop.
-   - Haz click_on_text en el icono o zona de subida. Si no hay texto visible, busca el botón de "Afig..." o el icono de archivo.
-2. Si aparece un menú, haz click_on_text("Puja un fitxer") o el equivalente.
-3. Haz click_on_text("Navega") o click_on_text("Choose File") o click_on_text("Tria fitxer") para abrir el diálogo de Windows.
-4. Se abrirá un diálogo de Windows para seleccionar archivo. Escribe la RUTA COMPLETA del archivo:
+Cuando el usuario pide "selecciona/sube/adjunta un archivo", NUNCA intentes arrastrar. Usa el file picker de Moodle:
+1. Tras hacer clic en "Afig la tramesa", aparece la zona de Fitxers con un área de arrastre.
+   NO arrastres. Haz clic en el PRIMER ICONO pequeño de la barra de herramientas de Fitxers 
+   (es un icono de "añadir archivo", arriba a la izquierda de la zona de Fitxers).
+   Usa click_on_text("Afig...") o click_on_text("Fitxers") para localizar la zona.
+2. Esto abre un modal del File Picker de Moodle. Haz click_on_text("Puja un fitxer").
+3. Haz click_on_text("Tria fitxer") o click_on_text("Choose File") o click_on_text("Navega") 
+   para abrir el diálogo nativo de Windows.
+4. En el diálogo de Windows, escribe la RUTA COMPLETA del archivo en la barra de nombre:
    [ACTION:{"module":"system_control","function":"type_in_app","params":{"text":"C:\\Users\\34655\\Downloads\\nombre_archivo.pdf"}}]
    [ACTION:{"module":"system_control","function":"press_key","params":{"key":"enter"}}]
-5. Después haz clic en "Puja aquest fitxer" o "Desa els canvis" para confirmar.
+5. Vuelve al modal de Moodle. Haz click_on_text("Puja aquest fitxer") para confirmar la subida.
+6. Luego haz click_on_text("Desa els canvis") para guardar la entrega.
 - La carpeta de descargas del usuario es: C:\\Users\\34655\\Downloads
-- NUNCA intentes arrastrar archivos. Siempre usa el diálogo de selección de archivos.
+- NUNCA intentes arrastrar archivos. SIEMPRE usa el file picker (icono + → Puja un fitxer → Tria fitxer).
 - Si el usuario dice "de la carpeta de descargas", usa la ruta C:\\Users\\34655\\Downloads\\nombre_archivo
+
+EJEMPLO COMPLETO de subir archivo en Moodle/Aules:
+  "sube el archivo actividad_tema6_Pau.pdf de descargas"
+  [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"Afig la tramesa"}}]
+  [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"Afig..."}}]
+  [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"Puja un fitxer"}}]
+  [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"Tria fitxer"}}]
+  [ACTION:{"module":"system_control","function":"type_in_app","params":{"text":"C:\\Users\\34655\\Downloads\\actividad_tema6_Pau.pdf"}}]
+  [ACTION:{"module":"system_control","function":"press_key","params":{"key":"enter"}}]
+  [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"Puja aquest fitxer"}}]
+  [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"Desa els canvis"}}]
 
 - EJEMPLO CORRECTO: "abre otro tab de google y entra en aules fp busca la asignatura interfaces y la entrega del tema 6"
   Voy a navegar a Aules FP, buscar la asignatura y la entrega, señor.
