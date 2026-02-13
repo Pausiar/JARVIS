@@ -213,7 +213,7 @@ class Orchestrator:
                                 unhandled_parts.append(part)
 
                 if results:
-                    response = "Hecho, señor. " + " | ".join(results)
+                    response = self._build_smart_response(results)
                     if unhandled_parts:
                         response += (
                             "\n\nAlgunas acciones no se pudieron completar: "
@@ -228,7 +228,7 @@ class Orchestrator:
                 logger.info(f"Intención directa detectada: {intent}")
                 result = self._execute_intent(intent)
                 if result:
-                    response = f"Hecho, señor. {result}"
+                    response = self._build_smart_response([result])
                     self.memory.save_message("assistant", response)
                     return response
 
@@ -285,11 +285,9 @@ class Orchestrator:
         # Paso 4: Limpiar y devolver respuesta
         clean_response = self.brain.clean_response(llm_response)
 
-        # Si hubo acciones ejecutadas, agregar info
+        # Si hubo acciones ejecutadas, evaluar resultados honestamente
         if action_results:
-            extra_info = " | ".join(action_results)
-            # Reemplazar la respuesta falsa del LLM por confirmación real
-            clean_response = f"Hecho, señor. {extra_info}"
+            clean_response = self._build_smart_response(action_results)
 
         # Paso 5: Detectar si JARVIS no supo hacer algo → investigar y aprender
         if self._should_learn(user_input, clean_response, llm_intents, action_results):
@@ -310,6 +308,39 @@ class Orchestrator:
 
         self.memory.save_message("assistant", clean_response)
         return clean_response
+
+    # ─── Evaluación inteligente de resultados ────────────────
+
+    _FAILURE_INDICATORS = [
+        "no se encontró", "no se pudo", "error", "no encontrado",
+        "no cambió", "no es interactivo", "texto vacío",
+        "no se detectó", "timeout", "no hay", "no pude",
+        "no se puede", "fallido", "no funciona",
+    ]
+
+    def _build_smart_response(self, results: list[str]) -> str:
+        """
+        Construye una respuesta honesta basada en los resultados de las acciones.
+        NO dice 'Hecho' si alguna acción falló.
+        """
+        successes = []
+        failures = []
+        for r in results:
+            r_lower = r.lower()
+            if any(f in r_lower for f in self._FAILURE_INDICATORS):
+                failures.append(r)
+            else:
+                successes.append(r)
+
+        if successes and not failures:
+            return f"Hecho, señor. {' | '.join(successes)}"
+        elif failures and not successes:
+            return f"No pude completar la tarea: {' | '.join(failures)}"
+        else:
+            return (
+                f"Parcialmente completado: {' | '.join(successes)}. "
+                f"Fallaron: {' | '.join(failures)}"
+            )
 
     # ─── Detección de workflows complejos ─────────────────────
 
@@ -464,16 +495,21 @@ class Orchestrator:
 
         Condiciones para aprender:
         - El LLM respondió que no puede hacerlo
-        - No se ejecutó ninguna acción
+        - No se ejecutó ninguna acción, o todas fallaron
         - El usuario parece querer una acción (no solo conversar)
         """
-        # Si se ejecutaron acciones con éxito, no hay que aprender
+        # Si se ejecutaron acciones y al menos una tuvo éxito, no aprender
         if action_results:
-            return False
+            all_failed = all(
+                any(f in r.lower() for f in self._FAILURE_INDICATORS)
+                for r in action_results
+            )
+            if not all_failed:
+                return False
 
-        # Si hubo intenciones del LLM que se ejecutaron, no aprender
-        if llm_intents:
-            return False
+        # Si hubo intenciones del LLM sin resultados, no aprender aún
+        if llm_intents and not action_results:
+            pass  # Continuamos evaluando si la respuesta indica fallo
 
         # Detectar si la respuesta indica que no supo hacerlo
         failure_indicators = [
@@ -482,6 +518,7 @@ class Orchestrator:
             "no puedo acceder", "no dispongo", "no es posible",
             "no tengo la capacidad", "fuera de mi alcance",
             "no puedo completar", "i can't", "i cannot",
+            "no pude completar",  # Nuestro propio indicador de fallo
         ]
         response_lower = response.lower()
         is_failure = any(f in response_lower for f in failure_indicators)
@@ -624,7 +661,7 @@ class Orchestrator:
         Genera una respuesta JARVIS-style para un resultado de acción.
         No usa el LLM para evitar latencia — responde directamente.
         """
-        return f"Hecho, señor. {action_result}"
+        return self._build_smart_response([action_result])
 
     def _handle_greeting(self) -> str:
         """Responde a un saludo."""

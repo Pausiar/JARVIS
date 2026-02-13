@@ -492,6 +492,10 @@ class SystemControl:
 
             logger.info(f"Subiendo archivo: {file_path}")
 
+            # Verificar que el archivo existe
+            if not os.path.exists(file_path):
+                return f"No se encontró el archivo: {file_path}"
+
             # 1. Abrir DevTools Console (Ctrl+Shift+J)
             pyautogui.hotkey('ctrl', 'shift', 'j')
             time.sleep(1.5)
@@ -552,15 +556,50 @@ class SystemControl:
                 pass
             return f"Error al subir archivo: {e}"
 
+    def _verify_screen_changed(self, before_array, min_change_pct: float = 0.5) -> bool:
+        """
+        Compara un screenshot 'antes' con la pantalla actual para verificar
+        que hubo un cambio significativo (la acción tuvo efecto).
+
+        Args:
+            before_array: numpy array del screenshot antes de la acción.
+            min_change_pct: porcentaje mínimo de píxeles que deben cambiar.
+        Returns: True si la pantalla cambió significativamente.
+        """
+        import pyautogui
+        import numpy as np
+        try:
+            after_screenshot = pyautogui.screenshot()
+            after_array = np.array(after_screenshot)
+
+            # Si las dimensiones difieren, la pantalla definitivamente cambió
+            if before_array.shape != after_array.shape:
+                return True
+
+            # Calcular diferencia absoluta por pixel
+            diff = np.abs(before_array.astype(int) - after_array.astype(int))
+            # Un pixel "cambió" si la diferencia en algún canal es > 30
+            changed_pixels = np.any(diff > 30, axis=2)
+            change_pct = (np.sum(changed_pixels) / changed_pixels.size) * 100
+
+            logger.debug(f"Verificación de pantalla: {change_pct:.2f}% de píxeles cambiaron")
+            return change_pct >= min_change_pct
+        except Exception as e:
+            logger.warning(f"Error verificando cambio de pantalla: {e}")
+            # En caso de error, asumir que sí cambió (no bloquear)
+            return True
+
     def click_on_text(self, text: str, wait: float = 2.0) -> str:
         """
         Busca texto visible en pantalla y hace clic en él.
-        Estrategia escalonada:
+        Estrategia escalonada con VERIFICACIÓN post-clic:
         1. Ctrl+F para encontrar → detectar highlight naranja (diff) → clic en él
         2. UI Automation con validación estricta
         3. OCR como último recurso
+        Después de cada clic, verifica que la pantalla cambió.
         """
         import pyautogui
+        import numpy as np
         try:
             # Limpiar comillas extras que el LLM puede añadir
             clean_text = text.strip().strip('"').strip("'").strip('"').strip('"')
@@ -570,23 +609,42 @@ class SystemControl:
             # Esperar a que la UI se estabilice
             time.sleep(wait)
 
+            # Capturar screenshot ANTES para verificación posterior
+            before_screenshot = pyautogui.screenshot()
+            before_array = np.array(before_screenshot)
+
             # ─── Estrategia 1: Ctrl+F → detectar highlight (diff) → clic ─
             result = self._click_via_ctrlf_highlight(clean_text)
             if result:
                 time.sleep(2.5)
-                return result
+                if self._verify_screen_changed(before_array):
+                    return result
+                else:
+                    logger.warning(f"Clic Ctrl+F en '{clean_text}' reportado pero la pantalla NO cambió. Reintentando...")
 
             # ─── Estrategia 2: UI Automation con validación estricta ──
+            # Re-capturar before si ya se hizo un intento
+            if result:
+                before_array = np.array(pyautogui.screenshot())
             result = self._find_and_click_ui_element(clean_text)
             if result:
                 time.sleep(2.5)
-                return result
+                if self._verify_screen_changed(before_array):
+                    return result
+                else:
+                    logger.warning(f"Clic UI Automation en '{clean_text}' reportado pero la pantalla NO cambió.")
 
             # ─── Estrategia 3: OCR ───────────────────────────────────
+            if result:
+                before_array = np.array(pyautogui.screenshot())
             result = self._find_and_click_via_ocr(clean_text)
             if result:
                 time.sleep(2.5)
-                return result
+                if self._verify_screen_changed(before_array):
+                    return result
+                else:
+                    logger.warning(f"Clic OCR en '{clean_text}' reportado pero la pantalla NO cambió.")
+                    return f"Se hizo clic en '{clean_text}' pero la pantalla no cambió — puede que el elemento no sea interactivo."
 
             return f"No se encontró el texto '{clean_text}' en la pantalla."
         except Exception as e:
@@ -826,14 +884,21 @@ class SystemControl:
             $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
             $bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
 
-            # Crear motor OCR en español
-            $lang = New-Object Windows.Globalization.Language("es-ES")
+            # Crear motor OCR — probar varios idiomas (ca-ES, es-ES, en-US)
             $ocr = $null
-            if ([Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($lang)) {{
-                $ocr = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($lang)
+            foreach ($langTag in @("ca-ES", "es-ES", "en-US")) {{
+                $lang = New-Object Windows.Globalization.Language($langTag)
+                if ([Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($lang)) {{
+                    $ocr = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($lang)
+                    if ($null -ne $ocr) {{ break }}
+                }}
             }}
             if ($null -eq $ocr) {{
                 $ocr = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
+            }}
+            if ($null -eq $ocr) {{
+                Write-Output "OCR_ENGINE_NULL"
+                exit
             }}
 
             # Ejecutar OCR
@@ -904,6 +969,10 @@ class SystemControl:
 
             output = result.stdout.strip()
             logger.debug(f"OCR output: {output}")
+
+            if "OCR_ENGINE_NULL" in output:
+                logger.error("OCR engine es null — no hay idiomas OCR instalados en Windows.")
+                return None
 
             if output and output.startswith("FOUND:"):
                 coords_str = output.split("FOUND:")[-1].strip()
@@ -997,11 +1066,19 @@ class SystemControl:
 
             $lang = New-Object Windows.Globalization.Language("es-ES")
             $ocr = $null
-            if ([Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($lang)) {{
-                $ocr = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($lang)
+            foreach ($langTag in @("ca-ES", "es-ES", "en-US")) {{
+                $tryLang = New-Object Windows.Globalization.Language($langTag)
+                if ([Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($tryLang)) {{
+                    $ocr = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($tryLang)
+                    if ($null -ne $ocr) {{ break }}
+                }}
             }}
             if ($null -eq $ocr) {{
                 $ocr = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
+            }}
+            if ($null -eq $ocr) {{
+                Write-Output "OCR_ENGINE_NULL"
+                exit
             }}
 
             $result = Await ($ocr.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])
@@ -1040,8 +1117,15 @@ class SystemControl:
             if result.returncode != 0:
                 logger.warning(f"OCR PowerShell exit code: {result.returncode}")
 
+            stdout_text = result.stdout.strip()
+            if "OCR_ENGINE_NULL" in stdout_text:
+                logger.error("OCR engine es null — no hay idiomas OCR instalados en Windows. "
+                             "Instalar: Configuración > Hora e idioma > Idioma > "
+                             "Agregar idioma con OCR (Español, Catalán, English).")
+                return []
+
             lines = []
-            for raw_line in result.stdout.strip().split('\n'):
+            for raw_line in stdout_text.split('\n'):
                 raw_line = raw_line.strip()
                 if raw_line.startswith('LINE:'):
                     parts = raw_line[5:].split('|', 4)
