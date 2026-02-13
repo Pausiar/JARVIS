@@ -380,6 +380,165 @@ class LearningEngine:
 
         return response
 
+    # ─── Auto-aprendizaje vía ChatGPT/Claude en navegador ─────
+
+    def ask_chatgpt_for_help(self, problem: str, failure_context: str = "") -> str:
+        """
+        Abre ChatGPT en el navegador, pega el problema, espera la respuesta,
+        y la lee vía Ctrl+A Ctrl+C. Luego intenta ejecutar lo que sugiera.
+
+        Flujo:
+        1. Construir un prompt claro describiendo el problema
+        2. Abrir ChatGPT en Chrome (nueva pestaña)
+        3. Pegar el prompt en el textarea
+        4. Esperar a que ChatGPT responda (~15-25s)
+        5. Ctrl+A Ctrl+C para leer la respuesta entera
+        6. Extraer código/pasos de la respuesta
+        7. Probar el código → guardar como habilidad si funciona
+
+        Args:
+            problem: Descripción del problema a resolver.
+            failure_context: Qué salió mal antes.
+
+        Returns:
+            Resultado o lo que ChatGPT respondió.
+        """
+        import pyautogui
+        import time as _time
+        import webbrowser
+
+        logger.info(f"Preguntando a ChatGPT: '{problem[:80]}...'")
+
+        # 1. Construir prompt para ChatGPT
+        prompt_text = self._build_chatgpt_prompt(problem, failure_context)
+
+        # 2. Copiar el prompt al portapapeles ANTES de abrir el navegador
+        try:
+            ps_cmd = f'''
+            $text = @"
+{prompt_text.replace('"', '`"')}
+"@
+            Set-Clipboard -Value $text
+            '''
+            subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
+                capture_output=True, text=True, timeout=5
+            )
+            logger.info("Prompt copiado al portapapeles")
+        except Exception as e:
+            logger.error(f"Error copiando prompt: {e}")
+            return f"No pude copiar el prompt al portapapeles: {e}"
+
+        # 3. Abrir ChatGPT en el navegador
+        try:
+            webbrowser.open("https://chatgpt.com/")
+            logger.info("ChatGPT abierto en navegador")
+            _time.sleep(5.0)  # Esperar a que cargue la página
+        except Exception as e:
+            logger.error(f"Error abriendo ChatGPT: {e}")
+            return f"No pude abrir ChatGPT: {e}"
+
+        # 4. Hacer clic en el textarea de ChatGPT y pegar
+        screen_w, screen_h = pyautogui.size()
+        # El textarea de ChatGPT suele estar en la parte inferior central
+        textarea_x = screen_w // 2
+        textarea_y = int(screen_h * 0.85)
+        pyautogui.click(textarea_x, textarea_y)
+        _time.sleep(1.0)
+
+        # Pegar con Ctrl+V
+        pyautogui.hotkey('ctrl', 'v')
+        _time.sleep(1.0)
+
+        # 5. Enviar el mensaje (Enter)
+        pyautogui.press('enter')
+        logger.info("Prompt enviado a ChatGPT. Esperando respuesta...")
+
+        # 6. Esperar a que ChatGPT termine de responder
+        #    ChatGPT tarda ~10-30s dependiendo de la longitud
+        _time.sleep(25.0)
+
+        # 7. Leer la respuesta completa de ChatGPT (Ctrl+A Ctrl+C)
+        pyautogui.hotkey('ctrl', 'a')
+        _time.sleep(0.5)
+        pyautogui.hotkey('ctrl', 'c')
+        _time.sleep(0.5)
+
+        # Deseleccionar
+        pyautogui.click(screen_w // 2, screen_h // 2)
+        _time.sleep(0.3)
+
+        # 8. Leer portapapeles con la respuesta de ChatGPT
+        try:
+            clip_result = subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", "Get-Clipboard"],
+                capture_output=True, text=True, timeout=5
+            )
+            chatgpt_response = clip_result.stdout.strip()
+            logger.info(f"Respuesta de ChatGPT: {len(chatgpt_response)} chars")
+        except Exception as e:
+            logger.error(f"Error leyendo respuesta de ChatGPT: {e}")
+            return f"ChatGPT respondió pero no pude leer la respuesta: {e}"
+
+        if not chatgpt_response or len(chatgpt_response) < 50:
+            return "No pude obtener una respuesta clara de ChatGPT, señor."
+
+        # 9. Extraer código de la respuesta
+        code_blocks = self._extract_code(chatgpt_response)
+
+        if code_blocks:
+            logger.info(f"ChatGPT sugirió {len(code_blocks)} bloques de código")
+            for i, code in enumerate(code_blocks):
+                test_result = self._test_code(code)
+                if test_result["success"]:
+                    # ¡Funciona! Guardar como habilidad
+                    skill = self._create_skill(
+                        problem, code, chatgpt_response, test_result
+                    )
+                    skill["source"] = "chatgpt"
+                    self._skills.append(skill)
+                    self._save_skills()
+                    logger.info(f"Nueva habilidad aprendida de ChatGPT: '{skill['name']}'")
+                    return (
+                        f"He consultado a ChatGPT y he aprendido algo nuevo, señor. "
+                        f"{test_result['output']}"
+                    )
+
+            # Código no funcionó — guardar como instrucciones
+            skill = self._create_skill(
+                problem, "", chatgpt_response, None, skill_type="instructions"
+            )
+            skill["source"] = "chatgpt"
+            self._skills.append(skill)
+            self._save_skills()
+
+        # 10. Devolver la respuesta de ChatGPT (resumida por nuestro LLM)
+        if self._brain:
+            summary = self._brain.chat(
+                f"Resume esta respuesta de ChatGPT en máximo 3 párrafos. "
+                f"Si hay pasos a seguir, lístalos. Si hay código, menciónalo:\n\n"
+                f"{chatgpt_response[:3000]}",
+                context="Resumiendo respuesta de ChatGPT"
+            )
+            return f"He consultado a ChatGPT, señor. Esto es lo que sugiere:\n\n{summary}"
+
+        return f"Respuesta de ChatGPT:\n{chatgpt_response[:1000]}"
+
+    def _build_chatgpt_prompt(self, problem: str, failure_context: str = "") -> str:
+        """Construye un prompt optimizado para ChatGPT."""
+        prompt = (
+            f"Soy un asistente de escritorio (JARVIS) en Windows y necesito ayuda.\n\n"
+            f"PROBLEMA: {problem}\n"
+        )
+        if failure_context:
+            prompt += f"\nCONTEXTO DEL ERROR: {failure_context}\n"
+        prompt += (
+            f"\nNecesito una solucion practica. "
+            f"Si es posible, dame codigo Python funcional para Windows. "
+            f"Si no es codigo, dame pasos claros que pueda seguir automaticamente."
+        )
+        return prompt
+
     # ─── Helpers internos ─────────────────────────────────────
 
     def _build_research_prompt(self, user_request: str, failure_context: str = "") -> str:

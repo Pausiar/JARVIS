@@ -291,6 +291,14 @@ class Orchestrator:
             )
             if learn_result and not learn_result.startswith("Error"):
                 clean_response = learn_result
+            else:
+                # Escalada: preguntar a ChatGPT si el LLM propio no pudo
+                logger.info("LLM propio no pudo resolver. Escalando a ChatGPT...")
+                chatgpt_result = self.learner.ask_chatgpt_for_help(
+                    user_input, failure_context=clean_response
+                )
+                if chatgpt_result and not chatgpt_result.startswith("Error"):
+                    clean_response = chatgpt_result
 
         self.memory.save_message("assistant", clean_response)
         return clean_response
@@ -717,8 +725,27 @@ class Orchestrator:
                 context="Resolviendo ejercicios capturados de pantalla"
             )
 
-            if not solutions or solutions.startswith(("Me temo", "No he podido")):
-                return "No pude resolver los ejercicios. " + (solutions or "")
+            # Detectar si el LLM NO pudo resolver (no pegar errores en la app destino)
+            failure_phrases = (
+                "Me temo", "No he podido", "No pude", "Lo siento",
+                "no hay ejercicio", "no encuentro", "no proporciona",
+                "no puedo resolver", "no es posible", "información insuficiente",
+                "no hay contenido", "no se puede", "No hay ejercicio",
+                "Could not", "cannot", "I'm sorry",
+            )
+            if not solutions or any(solutions.lower().startswith(f.lower()) for f in failure_phrases):
+                logger.warning(f"LLM no pudo resolver. Respuesta: {solutions[:200]}")
+                return (
+                    "No pude resolver los ejercicios del contenido capturado, señor. "
+                    "Puede que el texto no contenga ejercicios claros o que el "
+                    "ejercicio solicitado no exista en la página. "
+                    + (solutions[:300] if solutions else "")
+                )
+
+            # Detectar también si la respuesta parece un mensaje de error (no un ejercicio resuelto)
+            if len(solutions) < 30 or "no hay" in solutions.lower()[:100]:
+                logger.warning(f"Respuesta demasiado corta o parece error: {solutions[:200]}")
+                return f"El LLM no generó soluciones válidas, señor. Respuesta: {solutions[:300]}"
 
             logger.info(f"Soluciones generadas: {len(solutions)} caracteres")
 
@@ -789,6 +816,11 @@ class Orchestrator:
         return self.learner.research_and_learn(
             topic, failure_context="Investigación solicitada por el usuario"
         )
+
+    def ask_chatgpt(self, question: str) -> str:
+        """Pregunta directamente a ChatGPT abriendo el navegador."""
+        logger.info(f"Pregunta a ChatGPT solicitada: '{question}'")
+        return self.learner.ask_chatgpt_for_help(question)
 
     def _minimize_jarvis_window(self):
         """Minimiza la ventana de JARVIS para no tapar la pantalla."""

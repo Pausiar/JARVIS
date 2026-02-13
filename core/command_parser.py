@@ -337,6 +337,24 @@ class CommandParser:
                 "orchestrator", "research_topic",
                 lambda m: {"topic": m.group(1).strip()},
             ),
+            # "pregunta a chatgpt X" / "pregúntale a chatgpt X" / "consulta chatgpt X"
+            (
+                re.compile(
+                    r"(?:pregunta|preg[uú]ntale|consulta|pide)\s+(?:a\s+)?(?:chatgpt|chat\s*gpt|claude|ia)\s+(?:sobre\s+|cómo\s+|como\s+|que\s+|qué\s+)?(.+)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "ask_chatgpt",
+                lambda m: {"question": m.group(1).strip()},
+            ),
+            # "abre chatgpt y pregunta X"
+            (
+                re.compile(
+                    r"(?:abre|ve\s+a)\s+(?:chatgpt|chat\s*gpt|claude)\s+y\s+(?:pregunta|preg[uú]ntale|consulta|pide)\s+(?:sobre\s+|cómo\s+|como\s+)?(.+)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "ask_chatgpt",
+                lambda m: {"question": m.group(1).strip()},
+            ),
         ])
 
         # ─── Control del Sistema ──────────────────────────────
