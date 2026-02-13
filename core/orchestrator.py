@@ -625,19 +625,22 @@ class Orchestrator:
         """
         Lee ejercicios de una aplicación/pestaña (ej: Chrome con PDF), los resuelve
         con el LLM, y escribe las soluciones en otra aplicación (ej: IntelliJ, Google Docs).
-
-        Flujo:
-        1. Enfocar la app/pestaña fuente (donde está el contenido a leer)
-        2. Minimizar JARVIS para no tapar el contenido
-        3. Intentar leer la URL de la barra de direcciones
-        4. Si es un PDF local → leerlo directamente con PyMuPDF
-        5. Si no → Ctrl+A Ctrl+C para copiar texto al portapapeles
-        6. Enviar al LLM para resolver
-        7. Enfocar la app/pestaña destino, escribir soluciones
         """
         import pyautogui
         import subprocess
         sc = self.modules.get("system_control")
+        if not sc:
+            return "Módulo de control del sistema no disponible."
+
+        # Normalizar target_app: "el segundo", "la otra", "el otro tab" → siguiente pestaña
+        tab_synonyms = [
+            "el segundo", "la segunda", "el otro", "la otra",
+            "otro tab", "otra pestaña", "segundo tab", "segunda pestaña",
+            "next", "siguiente",
+        ]
+        if target_app and target_app.lower().strip() in tab_synonyms:
+            logger.info(f"target_app '{target_app}' normalizado a → siguiente pestaña (tab switch)")
+            target_app = ""  # Vaciar para que use switch_tab en vez de focus_window
         if not sc:
             return "Módulo de control del sistema no disponible."
 
@@ -834,6 +837,179 @@ class Orchestrator:
     def forget_skill(self, skill_name: str) -> str:
         """Elimina una habilidad aprendida."""
         return self.learner.forget_skill(skill_name)
+
+    def format_in_app(self, app_name: str, format_instruction: str) -> str:
+        """
+        Va a una app (Word, Google Docs, etc.) y aplica formato usando el LLM
+        para decidir qué teclas usar. Usa Ctrl+A para seleccionar si es necesario.
+        
+        El LLM analiza el formato pedido y genera secuencias de hotkeys.
+        
+        Args:
+            app_name: App donde formatear (word, google docs, etc.)
+            format_instruction: Qué formato aplicar (ej: "pon en negrita los enunciados")
+        """
+        import pyautogui
+        sc = self.modules.get("system_control")
+        if not sc:
+            return "Módulo de control del sistema no disponible."
+
+        try:
+            # 1. Minimizar JARVIS y enfocar la app
+            self._minimize_jarvis_window()
+            time.sleep(1.5)
+
+            logger.info(f"Formateando en: {app_name}")
+            focus_result = sc.focus_window(app_name)
+            logger.info(f"Focus para formato: {focus_result}")
+            time.sleep(2.0)
+
+            screen_w, screen_h = pyautogui.size()
+
+            # 2. Primero, leer el contenido actual del documento (Ctrl+A Ctrl+C)
+            pyautogui.click(screen_w // 2, screen_h // 2)
+            time.sleep(0.5)
+            pyautogui.hotkey('ctrl', 'a')
+            time.sleep(0.3)
+            pyautogui.hotkey('ctrl', 'c')
+            time.sleep(0.5)
+
+            import subprocess
+            clip_result = subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-command", "Get-Clipboard"],
+                capture_output=True, text=True, timeout=5
+            )
+            current_text = clip_result.stdout.strip()
+            
+            # Deseleccionar
+            pyautogui.press('home')
+            time.sleep(0.3)
+
+            logger.info(f"Texto actual del documento: {len(current_text)} chars")
+
+            # 3. Pedir al LLM que genere el texto ya formateado y una estrategia 
+            format_prompt = (
+                f"El usuario tiene este texto en un documento ({app_name}):\n\n"
+                f"{current_text[:5000]}\n\n"
+                f"El usuario quiere: '{format_instruction}'\n\n"
+                f"IMPORTANTE: No puedo manipular el ratón con precisión para seleccionar "
+                f"texto específico en el documento. La mejor estrategia es:\n"
+                f"1. Seleccionar TODO (Ctrl+A)\n"
+                f"2. Borrar todo\n"
+                f"3. Re-escribir el contenido ya formateado\n\n"
+                f"Re-escribe el texto completo tal como debe quedar en el documento. "
+                f"Aplica el formato pedido. Si pide negrita en ciertos textos, "
+                f"usa **texto** para indicar dónde va negrita (yo luego lo proceso). "
+                f"Si pide subrayado, usa __texto__. "
+                f"Mantén el resto del contenido EXACTAMENTE igual.\n\n"
+                f"Devuelve SOLO el texto formateado, nada más."
+            )
+
+            formatted_text = self.brain.chat(
+                format_prompt,
+                context="Formateando documento"
+            )
+
+            if not formatted_text or len(formatted_text) < 20:
+                self._restore_jarvis_window()
+                return "No pude generar el formato, señor."
+
+            # 4. Seleccionar todo y reemplazar con el texto formateado
+            #    Para apps como Word/Google Docs que soportan formato real:
+            #    Procesamos los markers **bold** y __underline__ con hotkeys
+            pyautogui.click(screen_w // 2, screen_h // 2)
+            time.sleep(0.3)
+            pyautogui.hotkey('ctrl', 'a')
+            time.sleep(0.3)
+            pyautogui.press('delete')
+            time.sleep(0.5)
+
+            # 5. Escribir el texto con formato real usando hotkeys
+            self._type_with_formatting(formatted_text, sc)
+
+            # 6. Restaurar JARVIS
+            self._restore_jarvis_window()
+            return f"Formato aplicado en {app_name}, señor."
+
+        except Exception as e:
+            logger.error(f"Error formateando: {e}")
+            self._restore_jarvis_window()
+            return f"Error al formatear: {e}"
+
+    def _type_with_formatting(self, text: str, sc):
+        """
+        Escribe texto aplicando formato real vía hotkeys.
+        **texto** → Ctrl+B antes, escribe, Ctrl+B después (negrita)
+        __texto__ → Ctrl+U antes, escribe, Ctrl+U después (subrayado)
+        """
+        import pyautogui
+        import re
+
+        # Parsear segmentos de texto con formato
+        # Procesamos por líneas para mantener estructura
+        lines = text.split('\n')
+        
+        for i, line in enumerate(lines):
+            if i > 0:
+                pyautogui.press('enter')
+                time.sleep(0.05)
+
+            if not line.strip():
+                continue
+
+            # Buscar segmentos con formato en la línea
+            pos = 0
+            remaining = line
+
+            while remaining:
+                # Buscar el próximo marcador de formato
+                bold_match = re.search(r'\*\*(.+?)\*\*', remaining)
+                underline_match = re.search(r'__(.+?)__', remaining)
+
+                # Encontrar cuál viene primero
+                next_match = None
+                fmt_type = None
+                
+                if bold_match and underline_match:
+                    if bold_match.start() < underline_match.start():
+                        next_match = bold_match
+                        fmt_type = 'bold'
+                    else:
+                        next_match = underline_match
+                        fmt_type = 'underline'
+                elif bold_match:
+                    next_match = bold_match
+                    fmt_type = 'bold'
+                elif underline_match:
+                    next_match = underline_match
+                    fmt_type = 'underline'
+
+                if next_match:
+                    # Escribir texto antes del formato
+                    before = remaining[:next_match.start()]
+                    if before:
+                        sc.type_long_text(before)
+                        time.sleep(0.1)
+
+                    # Activar formato, escribir, desactivar
+                    format_text = next_match.group(1)
+                    hotkey = 'b' if fmt_type == 'bold' else 'u'
+                    
+                    pyautogui.hotkey('ctrl', hotkey)  # Activar formato
+                    time.sleep(0.1)
+                    sc.type_long_text(format_text)
+                    time.sleep(0.1)
+                    pyautogui.hotkey('ctrl', hotkey)  # Desactivar formato
+                    time.sleep(0.1)
+
+                    remaining = remaining[next_match.end():]
+                else:
+                    # No más formato — escribir el resto
+                    if remaining:
+                        sc.type_long_text(remaining)
+                    remaining = ""
+
+            time.sleep(0.05)
 
     def research_topic(self, topic: str) -> str:
         """Investiga proactivamente cómo hacer algo."""

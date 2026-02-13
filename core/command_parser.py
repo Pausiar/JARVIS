@@ -357,6 +357,57 @@ class CommandParser:
             ),
         ])
 
+        # ─── Formateo de documentos ──────────────────────────
+        patterns.extend([
+            # "dale formato al word poniendo los enunciados en negrita"
+            # "formatea el documento de google con los titulos en negrita"
+            (
+                re.compile(
+                    r"(?:dale|da|pon|aplica|haz)\s+(?:un\s+poco\s+de\s+)?(?:formato|estilo)\s+"
+                    r"(?:al?|en\s+(?:el|la)?\s*)"
+                    r"([\w\s]+?)\s+"
+                    r"(?:con|poniendo|subrayando|marcando|resaltando|haciendo)\s+"
+                    r"(.+)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "format_in_app",
+                lambda m: {
+                    "app_name": m.group(1).strip(),
+                    "format_instruction": m.group(2).strip(),
+                },
+            ),
+            # "formatea el word" / "dale formato al google docs"
+            (
+                re.compile(
+                    r"(?:formatea|formatear|dale\s+formato)\s+"
+                    r"(?:al?|el|la)?\s*"
+                    r"([\w\s]+?)(?:\s*$)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "format_in_app",
+                lambda m: {
+                    "app_name": m.group(1).strip(),
+                    "format_instruction": "aplica formato general con enunciados en negrita",
+                },
+            ),
+            # "ves al word y pon en negrita los enunciados"
+            # "ve al google docs y subraya los títulos"
+            (
+                re.compile(
+                    r"(?:ve[s]?|ir|vete)\s+(?:al?|a\s+(?:el|la)?\s*)"
+                    r"([\w\s]+?)\s+"
+                    r"(?:y\s+)?(?:pon|dale|selecciona|marca|subraya|haz)\s+"
+                    r"(.+)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "format_in_app",
+                lambda m: {
+                    "app_name": m.group(1).strip(),
+                    "format_instruction": m.group(2).strip(),
+                },
+            ),
+        ])
+
         # ─── Control del Sistema ──────────────────────────────
         patterns.extend([
             (
