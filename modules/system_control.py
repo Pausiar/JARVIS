@@ -76,6 +76,24 @@ class SystemControl:
         }
         logger.info("SystemControl inicializado.")
 
+    # ─── Helpers internos ─────────────────────────────────────
+
+    def _safe_set_clipboard(self, text: str) -> None:
+        """
+        Copia texto al portapapeles de forma segura.
+        Usa -EncodedCommand para evitar problemas con comillas,
+        apóstrofes y caracteres especiales en PowerShell.
+        """
+        import base64
+        # PowerShell -EncodedCommand espera UTF-16LE en Base64
+        ps_code = f'Set-Clipboard -Value "{text.replace(chr(34), chr(96)+chr(34))}"'
+        encoded = base64.b64encode(ps_code.encode('utf-16-le')).decode('ascii')
+        subprocess.run(
+            ["powershell", "-NoProfile", "-EncodedCommand", encoded],
+            check=True, timeout=5,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+
     # ─── Aplicaciones ─────────────────────────────────────────
 
     def open_application(self, app_name: str) -> str:
@@ -103,13 +121,7 @@ class SystemControl:
                 pyautogui.typewrite(search_term, interval=0.03)
             else:
                 # Para texto con acentos/unicode: copiar al portapapeles y pegar
-                import subprocess as _sp
-                _sp.run(
-                    ["powershell", "-command",
-                     f"Set-Clipboard -Value '{search_term}'"],
-                    check=True, timeout=5,
-                    stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
-                )
+                self._safe_set_clipboard(search_term)
                 pyautogui.hotkey("ctrl", "v")
 
             time.sleep(1.0)
@@ -468,7 +480,7 @@ class SystemControl:
         Estrategia escalonada:
         1. UI Automation (rápido, funciona con apps nativas)
         2. OCR con Windows Media OCR (funciona con todo, incluyendo Chrome/Discord)
-        3. Fallback: Ctrl+F
+        3. Fallback: Ctrl+F + Enter (navega al resultado)
         """
         import pyautogui
         try:
@@ -478,11 +490,14 @@ class SystemControl:
             # 1. Intentar con UI Automation (rápido)
             result = self._find_and_click_ui_element(text)
             if result:
+                # Esperar a que cargue la nueva página/vista
+                time.sleep(2.5)
                 return result
 
             # 2. Intentar con OCR de pantalla (funciona con Chrome, Discord, etc.)
             result = self._find_and_click_via_ocr(text)
             if result:
+                time.sleep(2.5)
                 return result
 
             # 3. Fallback: buscar con Ctrl+F
@@ -501,14 +516,17 @@ class SystemControl:
         a través de PowerShell.
         """
         try:
+            # Escapar caracteres problemáticos para PowerShell
+            safe_text = text.replace('"', '`"').replace("'", "''")
             # Usar PowerShell para buscar elementos de UI con el texto
             ps_script = f'''
             Add-Type -AssemblyName UIAutomationClient
             Add-Type -AssemblyName UIAutomationTypes
             $root = [System.Windows.Automation.AutomationElement]::RootElement
+            $searchText = "{safe_text}"
             $condition = New-Object System.Windows.Automation.PropertyCondition(
                 [System.Windows.Automation.AutomationElement]::NameProperty,
-                "{text}"
+                $searchText
             )
             $element = $root.FindFirst(
                 [System.Windows.Automation.TreeScope]::Descendants,
@@ -529,7 +547,7 @@ class SystemControl:
                 foreach ($el in $elements) {{
                     try {{
                         $name = $el.Current.Name
-                        if ($name -and $name -like "*{text}*") {{
+                        if ($name -and $name -like "*$searchText*") {{
                             $rect = $el.Current.BoundingRectangle
                             if ($rect.Width -gt 0 -and $rect.Height -gt 0) {{
                                 $x = [int]($rect.X + $rect.Width / 2)
@@ -579,12 +597,7 @@ class SystemControl:
             if text.isascii():
                 pyautogui.typewrite(text, interval=0.03)
             else:
-                subprocess.run(
-                    ["powershell", "-command",
-                     f"Set-Clipboard -Value '{text}'"],
-                    check=True, timeout=5,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                )
+                self._safe_set_clipboard(text)
                 pyautogui.hotkey('ctrl', 'v')
 
             time.sleep(0.3)
@@ -1435,12 +1448,7 @@ class SystemControl:
             if text.isascii():
                 pyautogui.typewrite(text, interval=0.03)
             else:
-                subprocess.run(
-                    ["powershell", "-command",
-                     f"Set-Clipboard -Value '{text}'"],
-                    check=True, timeout=5,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                )
+                self._safe_set_clipboard(text)
                 pyautogui.hotkey('ctrl', 'v')
             return f"Texto escrito: '{text}'"
         except Exception as e:
@@ -1553,12 +1561,7 @@ class SystemControl:
             if text.isascii():
                 pyautogui.typewrite(text, interval=0.03)
             else:
-                subprocess.run(
-                    ["powershell", "-command",
-                     f"Set-Clipboard -Value '{text}'"],
-                    check=True, timeout=5,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                )
+                self._safe_set_clipboard(text)
                 pyautogui.hotkey('ctrl', 'v')
 
             time.sleep(0.3)
@@ -1652,16 +1655,13 @@ class SystemControl:
             if url.isascii():
                 pyautogui.typewrite(url, interval=0.02)
             else:
-                subprocess.run(
-                    ["powershell", "-command",
-                     f"Set-Clipboard -Value '{url}'"],
-                    check=True, timeout=5,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                )
+                self._safe_set_clipboard(url)
                 pyautogui.hotkey('ctrl', 'v')
 
             time.sleep(0.2)
             pyautogui.press('enter')
+            # Esperar a que la página cargue
+            time.sleep(3.0)
             return f"Navegando a: {url}"
         except Exception as e:
             logger.error(f"Error navegando a URL: {e}")
