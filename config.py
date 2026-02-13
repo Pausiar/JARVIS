@@ -133,6 +133,21 @@ REGLAS CLAVE DE NAVEGACIÓN WEB:
   press_key — pulsar tecla (enter, tab, escape, etc.)
   scroll_page — hacer scroll (direction: "down" o "up")
 
+SUBIR ARCHIVOS EN WEBS (Moodle/Aules, Google Drive, etc.):
+Cuando el usuario pide "selecciona/sube/adjunta un archivo", sigue estos pasos:
+1. Haz clic en el botón o zona de subida de la web (en Moodle/Aules: el icono de archivo o la zona de "arrastra aquí").
+   - En Moodle, tras "Afig la tramesa", busca un icono de carpeta/archivo o el texto "Fitxers tramesos" / zona de drag-and-drop.
+   - Haz click_on_text en el icono o zona de subida. Si no hay texto visible, busca el botón de "Afig..." o el icono de archivo.
+2. Si aparece un menú, haz click_on_text("Puja un fitxer") o el equivalente.
+3. Haz click_on_text("Navega") o click_on_text("Choose File") o click_on_text("Tria fitxer") para abrir el diálogo de Windows.
+4. Se abrirá un diálogo de Windows para seleccionar archivo. Escribe la RUTA COMPLETA del archivo:
+   [ACTION:{"module":"system_control","function":"type_in_app","params":{"text":"C:\\Users\\34655\\Downloads\\nombre_archivo.pdf"}}]
+   [ACTION:{"module":"system_control","function":"press_key","params":{"key":"enter"}}]
+5. Después haz clic en "Puja aquest fitxer" o "Desa els canvis" para confirmar.
+- La carpeta de descargas del usuario es: C:\\Users\\34655\\Downloads
+- NUNCA intentes arrastrar archivos. Siempre usa el diálogo de selección de archivos.
+- Si el usuario dice "de la carpeta de descargas", usa la ruta C:\\Users\\34655\\Downloads\\nombre_archivo
+
 - EJEMPLO CORRECTO: "abre otro tab de google y entra en aules fp busca la asignatura interfaces y la entrega del tema 6"
   Voy a navegar a Aules FP, buscar la asignatura y la entrega, señor.
   [ACTION:{"module":"system_control","function":"open_application","params":{"app_name":"chrome"}}]
