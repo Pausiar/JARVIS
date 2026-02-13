@@ -478,34 +478,39 @@ class SystemControl:
         """
         Busca texto visible en pantalla y hace clic en él.
         Estrategia escalonada:
-        1. Ctrl+F para encontrar → detectar highlight naranja → clic en él
+        1. Ctrl+F para encontrar → detectar highlight naranja (diff) → clic en él
         2. UI Automation con validación estricta
-        3. Último recurso: clic en la zona central donde Chrome muestra el match
+        3. OCR como último recurso
         """
         import pyautogui
         try:
+            # Limpiar comillas extras que el LLM puede añadir
+            clean_text = text.strip().strip('"').strip("'").strip('"').strip('"')
+            if not clean_text:
+                return f"Texto vacío, no se puede hacer clic."
+
             # Esperar a que la UI se estabilice
             time.sleep(wait)
 
-            # ─── Estrategia 1: Ctrl+F → detectar highlight → clic ────
-            result = self._click_via_ctrlf_highlight(text)
+            # ─── Estrategia 1: Ctrl+F → detectar highlight (diff) → clic ─
+            result = self._click_via_ctrlf_highlight(clean_text)
             if result:
                 time.sleep(2.5)
                 return result
 
             # ─── Estrategia 2: UI Automation con validación estricta ──
-            result = self._find_and_click_ui_element(text)
+            result = self._find_and_click_ui_element(clean_text)
             if result:
                 time.sleep(2.5)
                 return result
 
             # ─── Estrategia 3: OCR ───────────────────────────────────
-            result = self._find_and_click_via_ocr(text)
+            result = self._find_and_click_via_ocr(clean_text)
             if result:
                 time.sleep(2.5)
                 return result
 
-            return f"No se encontró el texto '{text}' en la pantalla."
+            return f"No se encontró el texto '{clean_text}' en la pantalla."
         except Exception as e:
             logger.error(f"Error haciendo clic en '{text}': {e}")
             return f"Error al intentar hacer clic en '{text}': {e}"
@@ -513,94 +518,99 @@ class SystemControl:
     def _click_via_ctrlf_highlight(self, text: str) -> Optional[str]:
         """
         Usa Ctrl+F para buscar el texto → Chrome lo resalta en naranja/amarillo.
-        Captura screenshot → detecta el rectángulo de color del highlight → clic.
-        Si no detecta el color, cierra Ctrl+F y hace clic en la zona scrolleada.
+        Toma screenshot ANTES y DESPUÉS del Ctrl+F para detectar SOLO los píxeles
+        que cambiaron a naranja (eliminando badges, logos u otros naranjas pre-existentes).
         """
         import pyautogui
         import numpy as np
-        from PIL import Image
         try:
-            # 1. Abrir Ctrl+F y buscar el texto
+            # Limpiar el texto: quitar comillas extras que el LLM puede añadir
+            clean_text = text.strip().strip('"').strip("'").strip('"').strip('"')
+            if not clean_text:
+                return None
+
+            # 1. Screenshot ANTES del Ctrl+F (baseline)
+            before_screenshot = pyautogui.screenshot()
+            before_array = np.array(before_screenshot)
+
+            # 2. Abrir Ctrl+F y buscar el texto
             pyautogui.hotkey('ctrl', 'f')
             time.sleep(0.5)
 
-            if text.isascii():
-                pyautogui.typewrite(text, interval=0.03)
+            if clean_text.isascii():
+                pyautogui.typewrite(clean_text, interval=0.03)
             else:
-                self._safe_set_clipboard(text)
+                self._safe_set_clipboard(clean_text)
                 pyautogui.hotkey('ctrl', 'v')
 
             time.sleep(0.8)
             pyautogui.press('enter')  # Ir al primer resultado
             time.sleep(0.5)
 
-            # 2. Capturar screenshot con el highlight visible
-            screenshot = pyautogui.screenshot()
-            img_array = np.array(screenshot)
+            # 3. Screenshot DESPUÉS del Ctrl+F (con highlight)
+            after_screenshot = pyautogui.screenshot()
+            after_array = np.array(after_screenshot)
 
-            # 3. Buscar el color naranja del highlight activo de Chrome
-            #    Chrome usa ~RGB(255, 150, 50) para el match activo
-            #    y ~RGB(255, 255, 0) para los otros matches.
-            #    Buscamos el naranja (match activo) primero.
-            # Rango naranja del highlight activo (Chrome)
-            orange_mask = (
-                (img_array[:, :, 0] >= 230) &  # R alto
-                (img_array[:, :, 1] >= 120) & (img_array[:, :, 1] <= 190) &  # G medio
-                (img_array[:, :, 2] <= 80)  # B bajo
-            )
-
-            # Si no hay naranja, probar con amarillo (highlight pasivo)
-            if not np.any(orange_mask):
-                orange_mask = (
-                    (img_array[:, :, 0] >= 230) &  # R alto
-                    (img_array[:, :, 1] >= 220) &  # G alto
-                    (img_array[:, :, 2] <= 80)  # B bajo
-                )
-
-            # 4. Cerrar el buscador Ctrl+F
+            # 4. Cerrar Ctrl+F
             pyautogui.press('escape')
             time.sleep(0.3)
 
-            if np.any(orange_mask):
-                # Encontrar las posiciones del highlight
-                ys, xs = np.where(orange_mask)
-                screen_h = img_array.shape[0]
+            # 5. Detectar píxeles que CAMBIARON a naranja/amarillo
+            #    (solo los que NO eran naranja antes → elimina badges, logos, etc.)
+            #    Chrome highlight activo: ~RGB(255, 150, 50) naranja
+            #    Chrome highlight pasivo: ~RGB(255, 255, 0) amarillo
+            orange_after = (
+                (after_array[:, :, 0] >= 230) &  # R alto
+                (after_array[:, :, 1] >= 100) & (after_array[:, :, 1] <= 200) &  # G medio
+                (after_array[:, :, 2] <= 100)  # B bajo
+            )
+            orange_before = (
+                (before_array[:, :, 0] >= 230) &
+                (before_array[:, :, 1] >= 100) & (before_array[:, :, 1] <= 200) &
+                (before_array[:, :, 2] <= 100)
+            )
+            # Solo píxeles NUEVOS naranjas (diff)
+            new_orange = orange_after & ~orange_before
 
-                # FILTRAR píxeles al content area ANTES de calcular mediana
-                # (excluir barra de tabs/Ctrl+F arriba y taskbar abajo)
-                content_filter = (ys > 120) & (ys < (screen_h - 80))
+            # Si no hay naranjas nuevos, probar con amarillo
+            if not np.any(new_orange):
+                yellow_after = (
+                    (after_array[:, :, 0] >= 230) &
+                    (after_array[:, :, 1] >= 200) &
+                    (after_array[:, :, 2] <= 100)
+                )
+                yellow_before = (
+                    (before_array[:, :, 0] >= 230) &
+                    (before_array[:, :, 1] >= 200) &
+                    (before_array[:, :, 2] <= 100)
+                )
+                new_orange = yellow_after & ~yellow_before
+
+            if np.any(new_orange):
+                ys, xs = np.where(new_orange)
+                screen_h = after_array.shape[0]
+
+                # Filtrar al content area (excluir tabs, barra Ctrl+F, taskbar)
+                content_filter = (ys > 150) & (ys < (screen_h - 60))
                 xs_filtered = xs[content_filter]
                 ys_filtered = ys[content_filter]
 
-                if len(xs_filtered) > 3:  # Al menos unos píxeles en el content
+                if len(xs_filtered) > 3:
                     cx = int(np.median(xs_filtered))
                     cy = int(np.median(ys_filtered))
                     pyautogui.click(cx, cy)
-                    logger.info(f"Ctrl+F highlight: clic en '{text}' en ({cx}, {cy})")
+                    logger.info(f"Ctrl+F highlight (diff): clic en '{clean_text}' en ({cx}, {cy}), {len(xs_filtered)} px nuevos")
                     return f"Clic realizado en '{text}'"
                 else:
-                    logger.info(f"Highlight encontrado pero solo fuera del content area ({len(xs)} px total)")
+                    logger.info(f"Highlight diff: solo {len(xs)} px totales, {len(xs_filtered)} en content area")
 
-            # 5. Si no detectamos el highlight, la página ya se scrolleó
-            #    al texto. Intentar clic en la zona visible.
-            logger.info(f"No se detectó highlight para '{text}'. Intentando clic en zona central.")
-
-            # Obtener la ventana activa para limitar el clic al viewport
-            screen_w, screen_h = pyautogui.size()
-            # Chrome content area: ~85px desde arriba (tabs+address bar),
-            # ~40px desde abajo (taskbar)
-            content_center_y = 85 + (screen_h - 85 - 40) // 2
-            content_center_x = screen_w // 2
-
-            # Hacer clic en el centro del contenido
-            pyautogui.click(content_center_x, content_center_y)
-            time.sleep(0.3)
-
-            return f"Clic realizado en '{text}' (zona central)"
+            # 6. No se detectó highlight → Ctrl+F no encontró el texto, o vamos
+            #    al fallback. La página ya se scrolleó al texto si existe.
+            logger.info(f"No se detectó highlight para '{clean_text}', intentando UI Automation o OCR.")
+            return None
 
         except Exception as e:
             logger.warning(f"Error en Ctrl+F highlight click: {e}")
-            # Asegurar que cerramos Ctrl+F si hubo error
             try:
                 pyautogui.press('escape')
             except Exception:
