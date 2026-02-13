@@ -500,9 +500,10 @@ class SystemControl:
                 time.sleep(2.5)
                 return result
 
-            # 3. Fallback: buscar con Ctrl+F
+            # 3. Fallback: buscar con Ctrl+F, luego re-intentar clic
             result = self._click_via_accessibility(text)
             if result:
+                time.sleep(2.5)
                 return result
 
             return f"No se encontró el texto '{text}' en la pantalla."
@@ -580,17 +581,15 @@ class SystemControl:
 
     def _click_via_accessibility(self, text: str) -> Optional[str]:
         """
-        Fallback: intenta encontrar y clicar usando coordenadas de imagen.
-        Captura la pantalla y busca coincidencias de texto.
+        Fallback: usa Ctrl+F para localizar el texto en pantalla,
+        luego cierra el buscador y re-intenta OCR para hacer clic real.
+        Si OCR falla, intenta hacer clic cerca del texto resaltado con Enter + Tab.
         """
         try:
             import pyautogui
-            # Usar la función Tab para navegar por elementos
-            # Esto es un enfoque de último recurso
-            logger.info(f"Intentando localizar '{text}' con método alternativo...")
+            logger.info(f"Fallback: Ctrl+F para localizar '{text}' y luego clic...")
 
-            # Intentar buscar patrones de imagen si existe un template
-            # Por ahora, usamos el portapapeles + Ctrl+F como estrategia
+            # 1. Abrir Ctrl+F y buscar el texto
             pyautogui.hotkey('ctrl', 'f')
             time.sleep(0.5)
 
@@ -600,11 +599,37 @@ class SystemControl:
                 self._safe_set_clipboard(text)
                 pyautogui.hotkey('ctrl', 'v')
 
+            time.sleep(0.5)
+            pyautogui.press('enter')  # Ir al primer resultado
             time.sleep(0.3)
-            pyautogui.press('enter')
-            time.sleep(0.3)
+
+            # 2. Cerrar el buscador — el texto ya está scrolleado a la vista
             pyautogui.press('escape')
-            return f"Texto '{text}' buscado en la aplicación activa"
+            time.sleep(0.5)
+
+            # 3. Re-intentar OCR ahora que el texto está visible en pantalla
+            result = self._find_and_click_via_ocr(text)
+            if result:
+                logger.info(f"Fallback exitoso: OCR encontró '{text}' tras Ctrl+F")
+                return result
+
+            # 4. Si OCR sigue sin funcionar, intentar UI Automation de nuevo
+            result = self._find_and_click_ui_element(text)
+            if result:
+                logger.info(f"Fallback exitoso: UI Automation encontró '{text}' tras Ctrl+F")
+                return result
+
+            # 5. Último recurso: usar Ctrl+F de nuevo, presionar Escape,
+            #    y simular clic en el centro del match resaltado.
+            #    Chrome deja el scroll en el match → hacemos clic en el centro de la pantalla
+            #    ajustado un poco arriba donde Chrome suele mostrar el resultado.
+            logger.info(f"Último recurso: clic aproximado en la zona del texto '{text}'")
+            screen_w, screen_h = pyautogui.size()
+            # El texto resaltado suele estar a ~40% desde arriba
+            pyautogui.click(screen_w // 2, int(screen_h * 0.40))
+            time.sleep(0.3)
+
+            return f"Clic realizado en '{text}' (aproximado)"
         except Exception as e:
             logger.warning(f"Error en búsqueda de accesibilidad: {e}")
         return None
