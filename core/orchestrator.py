@@ -8,6 +8,7 @@ import logging
 import re
 import time
 import datetime
+import os
 from typing import Optional
 from pathlib import Path
 
@@ -628,12 +629,14 @@ class Orchestrator:
         Flujo:
         1. Enfocar la app/pestaña fuente (donde está el contenido a leer)
         2. Minimizar JARVIS para no tapar el contenido
-        3. Ctrl+A Ctrl+C para copiar TODO el contenido al portapapeles
-        4. Leer el portapapeles → eso es el texto del ejercicio
-        5. Restaurar JARVIS, enviar al LLM
-        6. Enfocar la app/pestaña destino, escribir soluciones
+        3. Intentar leer la URL de la barra de direcciones
+        4. Si es un PDF local → leerlo directamente con PyMuPDF
+        5. Si no → Ctrl+A Ctrl+C para copiar texto al portapapeles
+        6. Enviar al LLM para resolver
+        7. Enfocar la app/pestaña destino, escribir soluciones
         """
         import pyautogui
+        import subprocess
         sc = self.modules.get("system_control")
         if not sc:
             return "Módulo de control del sistema no disponible."
@@ -651,33 +654,45 @@ class Orchestrator:
             self._minimize_jarvis_window()
             time.sleep(2.0)
 
-            # 3. Dar foco al contenido (clic en zona derecha, evitando sidebars)
             screen_w, screen_h = pyautogui.size()
             click_x = int(screen_w * 0.65)
             click_y = int(screen_h * 0.40)
-            pyautogui.click(click_x, click_y)
-            time.sleep(0.5)
 
-            # 4. CAPTURA VÍA PORTAPAPELES  (Ctrl+A → Ctrl+C)
-            #    Mucho más fiable que OCR para contenido web/PDFs en browser
-            logger.info("Capturando contenido vía Ctrl+A + Ctrl+C...")
-            pyautogui.hotkey('ctrl', 'a')   # Seleccionar todo
-            time.sleep(0.5)
-            pyautogui.hotkey('ctrl', 'c')   # Copiar
-            time.sleep(0.5)
+            # 3. INTENTAR OBTENER LA URL de la barra de direcciones
+            #    Esto nos permite detectar si es un PDF local y leerlo directamente
+            clipboard_text = ""
+            pdf_path = self._try_extract_pdf_path()
 
-            # Leer el portapapeles
-            import subprocess
-            clip_result = subprocess.run(
-                ["powershell", "-command", "Get-Clipboard"],
-                capture_output=True, text=True, timeout=5
-            )
-            clipboard_text = clip_result.stdout.strip()
-            logger.info(f"Portapapeles: {len(clipboard_text)} chars capturados")
+            if pdf_path:
+                # 4a. PDF LOCAL detectado → leer directamente con PyMuPDF
+                logger.info(f"PDF local detectado: {pdf_path}")
+                clipboard_text = self._read_pdf_direct(pdf_path)
+                logger.info(f"PDF leído directamente: {len(clipboard_text)} chars")
+            
+            if not clipboard_text or len(clipboard_text.strip()) < 20:
+                # 4b. FALLBACK: Ctrl+A Ctrl+C para contenido seleccionable
+                logger.info("Intentando captura vía Ctrl+A + Ctrl+C...")
+                
+                # Clic en la zona de contenido
+                pyautogui.click(click_x, click_y)
+                time.sleep(0.5)
+                
+                pyautogui.hotkey('ctrl', 'a')   # Seleccionar todo
+                time.sleep(0.5)
+                pyautogui.hotkey('ctrl', 'c')   # Copiar
+                time.sleep(0.5)
 
-            # Deseleccionar para no dejar marcado (clic en cualquier sitio)
-            pyautogui.click(click_x, click_y)
-            time.sleep(0.3)
+                # Leer el portapapeles
+                clip_result = subprocess.run(
+                    ["powershell", "-ExecutionPolicy", "Bypass", "-command", "Get-Clipboard"],
+                    capture_output=True, text=True, timeout=5
+                )
+                clipboard_text = clip_result.stdout.strip()
+                logger.info(f"Portapapeles (Ctrl+A+C): {len(clipboard_text)} chars")
+
+                # Deseleccionar
+                pyautogui.click(click_x, click_y)
+                time.sleep(0.3)
 
             # 5. Restaurar ventana de JARVIS
             self._restore_jarvis_window()
@@ -821,6 +836,110 @@ class Orchestrator:
         """Pregunta directamente a ChatGPT abriendo el navegador."""
         logger.info(f"Pregunta a ChatGPT solicitada: '{question}'")
         return self.learner.ask_chatgpt_for_help(question)
+
+    # ─── Helpers para lectura de contenido ────────────────────
+
+    def _try_extract_pdf_path(self) -> str:
+        """
+        Intenta obtener la URL de la barra de direcciones del navegador (Ctrl+L → Ctrl+C).
+        Si es un PDF local (file:/// o chrome-extension con file:///), extrae la ruta.
+        
+        Returns:
+            Ruta local al PDF, o "" si no es un PDF local.
+        """
+        import pyautogui
+        import subprocess
+        import urllib.parse
+
+        try:
+            # Ctrl+L selecciona la barra de direcciones en Chrome/Edge/Firefox
+            pyautogui.hotkey('ctrl', 'l')
+            time.sleep(0.5)
+            pyautogui.hotkey('ctrl', 'c')
+            time.sleep(0.5)
+            # Escape para cerrar la barra de direcciones sin cambiar nada
+            pyautogui.press('escape')
+            time.sleep(0.3)
+
+            clip_result = subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-command", "Get-Clipboard"],
+                capture_output=True, text=True, timeout=5
+            )
+            url = clip_result.stdout.strip()
+            logger.info(f"URL de la barra de direcciones: {url[:150]}")
+
+            if not url:
+                return ""
+
+            # Detectar PDFs locales:
+            # 1. file:///C:/Users/.../file.pdf
+            # 2. chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/file:///C:/Users/.../file.pdf
+            local_path = ""
+
+            if "file:///" in url:
+                # Extraer la parte después de file:///
+                file_idx = url.index("file:///")
+                raw_path = url[file_idx + 8:]  # Quitar "file:///"
+                # Decodificar %20 → espacios, etc.
+                local_path = urllib.parse.unquote(raw_path)
+                # Limpiar query params o hashes si los hubiera
+                for sep in ['?', '#']:
+                    if sep in local_path:
+                        local_path = local_path[:local_path.index(sep)]
+
+            if local_path and local_path.lower().endswith('.pdf'):
+                # Normalizar path para Windows
+                local_path = local_path.replace('/', '\\')
+                if not local_path[0] == '\\':
+                    # Ya tiene forma C:\Users\...
+                    pass
+                logger.info(f"PDF local detectado: {local_path}")
+                if os.path.exists(local_path):
+                    return local_path
+                else:
+                    logger.warning(f"PDF path no existe: {local_path}")
+
+            return ""
+
+        except Exception as e:
+            logger.warning(f"Error extrayendo URL del navegador: {e}")
+            return ""
+
+    def _read_pdf_direct(self, pdf_path: str) -> str:
+        """
+        Lee un PDF directamente usando PyMuPDF (fitz).
+        Mucho más fiable que OCR o Ctrl+A en Adobe Acrobat.
+        
+        Args:
+            pdf_path: Ruta absoluta al archivo PDF.
+            
+        Returns:
+            Texto completo del PDF.
+        """
+        try:
+            import fitz  # PyMuPDF
+
+            doc = fitz.open(pdf_path)
+            all_text = []
+
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                text = page.get_text()
+                if text and text.strip():
+                    all_text.append(f"--- Página {page_num + 1} ---\n{text.strip()}")
+
+            doc.close()
+
+            full_text = "\n\n".join(all_text)
+            logger.info(f"PDF leído: {len(doc)} páginas, {len(full_text)} chars")
+            return full_text
+
+        except ImportError:
+            logger.warning("PyMuPDF (fitz) no está instalado.")
+            return ""
+        except Exception as e:
+            logger.error(f"Error leyendo PDF '{pdf_path}': {e}")
+            return ""
 
     def _minimize_jarvis_window(self):
         """Minimiza la ventana de JARVIS para no tapar la pantalla."""
