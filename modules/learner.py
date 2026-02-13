@@ -414,14 +414,20 @@ class LearningEngine:
 
         # 2. Copiar el prompt al portapapeles ANTES de abrir el navegador
         try:
-            ps_cmd = f'''
-            $text = @"
-{prompt_text.replace('"', '`"')}
-"@
-            Set-Clipboard -Value $text
-            '''
+            import base64
+            raw = prompt_text.encode('utf-16-le')
+            b64 = base64.b64encode(raw).decode('ascii')
             subprocess.run(
-                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
+                ["powershell", "-ExecutionPolicy", "Bypass", "-EncodedCommand", b64],
+                capture_output=True, text=True, timeout=5,
+                input=None
+            )
+            # El EncodedCommand ejecuta el texto como script, necesitamos Set-Clipboard
+            clip_script = f'Set-Clipboard -Value ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("{base64.b64encode(prompt_text.encode("utf-8")).decode("ascii")}")))'
+            clip_raw = clip_script.encode('utf-16-le')
+            clip_b64 = base64.b64encode(clip_raw).decode('ascii')
+            subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-EncodedCommand", clip_b64],
                 capture_output=True, text=True, timeout=5
             )
             logger.info("Prompt copiado al portapapeles")
