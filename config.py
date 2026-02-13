@@ -132,34 +132,20 @@ REGLAS CLAVE DE NAVEGACIÓN WEB:
   type_in_app — escribir texto en el campo activo
   press_key — pulsar tecla (enter, tab, escape, etc.)
   scroll_page — hacer scroll (direction: "down" o "up")
+  upload_file — subir un archivo a una web. Recibe la ruta del archivo. Se encarga de todo automáticamente.
 
 SUBIR ARCHIVOS EN WEBS (Moodle/Aules, Google Drive, etc.):
-Cuando el usuario pide "selecciona/sube/adjunta un archivo", NUNCA intentes arrastrar. Usa el file picker de Moodle:
-1. Tras hacer clic en "Afig la tramesa", aparece la zona de Fitxers con un área de arrastre.
-   NO arrastres. Haz clic en el PRIMER ICONO pequeño de la barra de herramientas de Fitxers 
-   (es un icono de "añadir archivo", arriba a la izquierda de la zona de Fitxers).
-   Usa click_on_text("Afig...") o click_on_text("Fitxers") para localizar la zona.
-2. Esto abre un modal del File Picker de Moodle. Haz click_on_text("Puja un fitxer").
-3. Haz click_on_text("Tria fitxer") o click_on_text("Choose File") o click_on_text("Navega") 
-   para abrir el diálogo nativo de Windows.
-4. En el diálogo de Windows, escribe la RUTA COMPLETA del archivo en la barra de nombre:
-   [ACTION:{"module":"system_control","function":"type_in_app","params":{"text":"C:\\Users\\34655\\Downloads\\nombre_archivo.pdf"}}]
-   [ACTION:{"module":"system_control","function":"press_key","params":{"key":"enter"}}]
-5. Vuelve al modal de Moodle. Haz click_on_text("Puja aquest fitxer") para confirmar la subida.
-6. Luego haz click_on_text("Desa els canvis") para guardar la entrega.
+Cuando el usuario pide "selecciona/sube/adjunta/entrega un archivo", usa upload_file:
+  [ACTION:{"module":"system_control","function":"upload_file","params":{"file_path":"C:\\Users\\34655\\Downloads\\nombre_archivo.pdf"}}]
+- upload_file se encarga de todo: abre el diálogo de archivos, escribe la ruta y confirma.
+- NUNCA intentes arrastrar archivos ni navegar manualmente por el file picker.
 - La carpeta de descargas del usuario es: C:\\Users\\34655\\Downloads
-- NUNCA intentes arrastrar archivos. SIEMPRE usa el file picker (icono + → Puja un fitxer → Tria fitxer).
-- Si el usuario dice "de la carpeta de descargas", usa la ruta C:\\Users\\34655\\Downloads\\nombre_archivo
+- Si el usuario dice "de descargas" o "de la carpeta de descargas", usa esa ruta.
+- Si el usuario solo dice el nombre del archivo sin ruta, asume que está en Downloads.
+- Antes de upload_file, asegúrate de estar en la página de la entrega (ej: "Afig la tramesa" ya pulsado).
 
-EJEMPLO COMPLETO de subir archivo en Moodle/Aules:
-  "sube el archivo actividad_tema6_Pau.pdf de descargas"
-  [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"Afig la tramesa"}}]
-  [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"Afig..."}}]
-  [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"Puja un fitxer"}}]
-  [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"Tria fitxer"}}]
-  [ACTION:{"module":"system_control","function":"type_in_app","params":{"text":"C:\\Users\\34655\\Downloads\\actividad_tema6_Pau.pdf"}}]
-  [ACTION:{"module":"system_control","function":"press_key","params":{"key":"enter"}}]
-  [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"Puja aquest fitxer"}}]
+EJEMPLO COMPLETO: "sube el archivo actividad_tema6_Pau.pdf de descargas"
+  [ACTION:{"module":"system_control","function":"upload_file","params":{"file_path":"C:\\Users\\34655\\Downloads\\actividad_tema6_Pau.pdf"}}]
   [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"Desa els canvis"}}]
 
 - EJEMPLO CORRECTO: "abre otro tab de google y entra en aules fp busca la asignatura interfaces y la entrega del tema 6"

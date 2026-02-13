@@ -474,6 +474,84 @@ class SystemControl:
 
     # ─── Interacción dentro de aplicaciones ──────────────────
 
+    def upload_file(self, file_path: str) -> str:
+        """
+        Sube un archivo a un formulario web (Moodle/Aules, Google Drive, etc.).
+        Usa la consola de DevTools de Chrome para disparar el input[type=file]
+        oculto, luego escribe la ruta en el diálogo nativo de Windows.
+        """
+        import pyautogui
+        try:
+            # Normalizar la ruta (por si viene con barras incorrectas)
+            file_path = file_path.strip().strip('"').strip("'")
+            # Si no tiene ruta completa, asumir carpeta de descargas
+            if not os.path.isabs(file_path):
+                file_path = os.path.join(
+                    r"C:\Users\34655\Downloads", file_path
+                )
+
+            logger.info(f"Subiendo archivo: {file_path}")
+
+            # 1. Abrir DevTools Console (Ctrl+Shift+J)
+            pyautogui.hotkey('ctrl', 'shift', 'j')
+            time.sleep(1.5)
+
+            # 2. Ejecutar JS para hacer clic en el input[type=file] oculto
+            #    Moodle tiene varios: el del filemanager y el del drag-and-drop.
+            #    Intentamos hacer clic en el primero que no esté disabled.
+            js_code = (
+                "var inputs = document.querySelectorAll('input[type=\"file\"]');"
+                "var clicked = false;"
+                "for (var i = 0; i < inputs.length; i++) {"
+                "  if (!inputs[i].disabled) {"
+                "    inputs[i].click();"
+                "    clicked = true;"
+                "    break;"
+                "  }"
+                "}"
+                "if (!clicked && inputs.length > 0) inputs[0].click();"
+                "console.log('JARVIS_FILE_INPUT_CLICKED:' + inputs.length);"
+            )
+            self._safe_set_clipboard(js_code)
+            pyautogui.hotkey('ctrl', 'v')
+            time.sleep(0.3)
+            pyautogui.press('enter')
+            time.sleep(2.0)
+
+            # 3. Cerrar DevTools (F12 o Ctrl+Shift+J)
+            pyautogui.hotkey('ctrl', 'shift', 'j')
+            time.sleep(1.0)
+
+            # 4. El diálogo nativo de Windows debería estar abierto.
+            #    Escribir la ruta del archivo en la barra de nombre.
+            self._safe_set_clipboard(file_path)
+            pyautogui.hotkey('ctrl', 'v')
+            time.sleep(0.5)
+            pyautogui.press('enter')
+            time.sleep(2.0)
+
+            # 5. Si Moodle abre un modal de confirmación (Puja aquest fitxer),
+            #    intentar hacer clic en él.
+            time.sleep(1.0)
+            result = self._click_via_ctrlf_highlight("Puja aquest fitxer")
+            if not result:
+                # Probar con UI Automation
+                result = self._find_and_click_ui_element("Puja aquest fitxer")
+
+            logger.info(f"Archivo subido: {file_path}")
+            return f"Archivo '{os.path.basename(file_path)}' subido correctamente"
+
+        except Exception as e:
+            logger.error(f"Error subiendo archivo: {e}")
+            # Intentar cerrar DevTools si quedó abierto
+            try:
+                pyautogui.press('escape')
+                time.sleep(0.3)
+                pyautogui.hotkey('ctrl', 'shift', 'j')
+            except Exception:
+                pass
+            return f"Error al subir archivo: {e}"
+
     def click_on_text(self, text: str, wait: float = 2.0) -> str:
         """
         Busca texto visible en pantalla y hace clic en él.
