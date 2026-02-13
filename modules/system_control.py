@@ -1057,6 +1057,22 @@ class SystemControl:
             app_lower = app_name.lower().strip()
             search = self._app_search_names.get(app_lower, app_name)
 
+            # Nombres de proceso alternativos para apps cuyos procesos no coinciden
+            _process_aliases = {
+                "intellij": ["idea64", "idea"],
+                "intellij idea": ["idea64", "idea"],
+                "idea": ["idea64", "idea"],
+                "pycharm": ["pycharm64", "pycharm"],
+                "webstorm": ["webstorm64", "webstorm"],
+                "android studio": ["studio64", "studio"],
+                "vscode": ["Code"],
+                "visual studio code": ["Code"],
+                "code": ["Code"],
+            }
+            extra_procs = _process_aliases.get(app_lower, [])
+            # Build a PowerShell array of extra process names for matching
+            extra_procs_ps = ",".join(f'"{p}"' for p in extra_procs) if extra_procs else ""
+
             ps_script = f'''
             Add-Type @"
                 using System;
@@ -1070,11 +1086,20 @@ class SystemControl:
                     public static extern bool IsIconic(IntPtr hWnd);
                 }}
 "@
+            $extraNames = @({extra_procs_ps})
             $procs = Get-Process | Where-Object {{ $_.MainWindowTitle -ne "" }}
             $target = $null
             foreach ($p in $procs) {{
-                if ($p.MainWindowTitle -like "*{search}*" -or
-                    $p.ProcessName -like "*{app_lower}*") {{
+                $matched = $false
+                # Match por título de ventana
+                if ($p.MainWindowTitle -like "*{search}*") {{ $matched = $true }}
+                # Match por nombre de proceso (original)
+                if ($p.ProcessName -like "*{app_lower}*") {{ $matched = $true }}
+                # Match por aliases de proceso (ej: idea64 para IntelliJ)
+                foreach ($alias in $extraNames) {{
+                    if ($p.ProcessName -eq $alias) {{ $matched = $true; break }}
+                }}
+                if ($matched) {{
                     $target = $p
                     break
                 }}
@@ -1087,7 +1112,7 @@ class SystemControl:
                 [JarvisWinFocus]::SetForegroundWindow($hwnd)
                 Write-Output "FOCUSED:$($target.MainWindowTitle)"
             }} else {{
-                Write-Output "NOT_FOUND"
+                Write-Output "NOT_FOUND:{search}"
             }}
             '''
             result = subprocess.run(
@@ -1095,10 +1120,18 @@ class SystemControl:
                 capture_output=True, text=True, timeout=10
             )
             output = result.stdout.strip()
+            stderr = result.stderr.strip()
+            if stderr:
+                logger.warning(f"focus_window stderr: {stderr}")
+            logger.info(f"focus_window output: {output}")
+
             if output.startswith("FOCUSED:"):
                 title = output.split("FOCUSED:", 1)[1]
                 logger.info(f"Ventana enfocada: {title}")
                 return f"Ventana '{title}' en primer plano."
+            if output.startswith("NOT_FOUND:"):
+                searched = output.split("NOT_FOUND:", 1)[1]
+                logger.warning(f"No se encontró ventana buscando: '{searched}' (proceso: {app_lower}, aliases: {extra_procs})")
             return f"No se encontró ventana de '{app_name}'."
         except Exception as e:
             logger.error(f"Error enfocando ventana: {e}")

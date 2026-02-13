@@ -724,21 +724,34 @@ class Orchestrator:
 
             # 6. Minimizar JARVIS de nuevo para escribir en el documento
             self._minimize_jarvis_window()
-            time.sleep(0.5)
+            time.sleep(2.0)  # Esperar bien a que se minimice
 
-            # 7. Enfocar la app/pestaña destino
+            # 7. Enfocar la app/pestaña destino (con reintento)
             if target_app:
                 logger.info(f"Enfocando app destino: {target_app}")
                 focus_result = sc.focus_window(target_app)
-                logger.info(f"Focus destino: {focus_result}")
+                logger.info(f"Focus destino (intento 1): {focus_result}")
                 time.sleep(2.0)
+
+                # Verificar que realmente se enfocó — si no, reintentar
+                active_title = sc.get_active_window_title()
+                logger.info(f"Ventana activa tras focus: {active_title}")
+                target_lower = target_app.lower()
+                if active_title and target_lower not in active_title.lower():
+                    logger.warning(f"Focus falló, reintentando con Alt+Tab y focus_window...")
+                    # Intento 2: Alt+Tab para sacar algo a primer plano + focus_window
+                    pyautogui.hotkey('alt', 'tab')
+                    time.sleep(1.5)
+                    focus_result = sc.focus_window(target_app)
+                    logger.info(f"Focus destino (intento 2): {focus_result}")
+                    time.sleep(2.0)
             else:
                 # Fallback: cambiar de pestaña en la misma app
                 logger.info(f"Cambiando a pestaña {target_tab}...")
                 sc.switch_tab(target_tab)
                 time.sleep(2.0)
 
-            # 8. Hacer clic en el cuerpo del documento/editor para asegurar foco
+            # 8. Hacer clic en el cuerpo del documento/editor para asegurar foco teclado
             pyautogui.click(screen_w // 2, screen_h // 2)
             time.sleep(1.0)
 
