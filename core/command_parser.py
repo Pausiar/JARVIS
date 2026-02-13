@@ -303,6 +303,42 @@ class CommandParser:
             ),
         ])
 
+        # ─── Aprendizaje / Habilidades ────────────────────────
+        patterns.extend([
+            # "qué has aprendido" / "lista habilidades" / "qué sabes hacer"
+            (
+                re.compile(
+                    r"(?:qu[eé]\s+(?:has\s+aprendido|sabes\s+hacer(?:\s+nuevo)?)|"
+                    r"lista(?:r?\s+)?(?:las?\s+)?habilidades|"
+                    r"muestra(?:me)?\s+(?:las?\s+)?habilidades|"
+                    r"skills?|habilidades\s+aprendidas)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "list_learned_skills",
+                lambda m: {},
+            ),
+            # "olvida la habilidad X" / "borra skill X"
+            (
+                re.compile(
+                    r"(?:olvida|olvidar|borra|borrar|elimina|eliminar)\s+"
+                    r"(?:la\s+)?(?:habilidad|skill)\s+(.+)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "forget_skill",
+                lambda m: {"skill_name": m.group(1).strip()},
+            ),
+            # "investiga cómo hacer X" / "aprende a hacer X"
+            (
+                re.compile(
+                    r"(?:investiga|investigar|aprende|aprender|averigua|averiguar)\s+"
+                    r"(?:c[oó]mo\s+)?(?:hacer|se\s+hace)?\s*(.+)",
+                    re.IGNORECASE,
+                ),
+                "orchestrator", "research_topic",
+                lambda m: {"topic": m.group(1).strip()},
+            ),
+        ])
+
         # ─── Control del Sistema ──────────────────────────────
         patterns.extend([
             (

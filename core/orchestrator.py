@@ -29,6 +29,7 @@ from modules.media_control import MediaControl
 from modules.notifications import NotificationManager
 from modules.calendar_manager import CalendarManager
 from modules.plugin_loader import PluginLoader
+from modules.learner import LearningEngine
 
 logger = logging.getLogger("jarvis.orchestrator")
 
@@ -95,11 +96,15 @@ class Orchestrator:
         except Exception as e:
             logger.warning(f"Error iniciando recordatorios: {e}")
 
+        # Motor de aprendizaje
+        self.learner = LearningEngine()
+        self.learner.set_brain(self.brain)
+
         # Último input para aprendizaje de correcciones
         self._last_user_input = ""
         self._last_action = ""
 
-        logger.info("Orchestrator inicializado con todos los módulos.")
+        logger.info(f"Orchestrator inicializado. {self.learner.get_skill_count()} habilidades aprendidas.")
 
     # ─── Procesamiento principal ──────────────────────────────
 
@@ -137,6 +142,16 @@ class Orchestrator:
 
         # Guardar para posible corrección futura
         self._last_user_input = user_input
+
+        # Paso 0: Verificar si tenemos una habilidad aprendida para esto
+        learned_skill = self.learner.find_skill(user_input)
+        if learned_skill:
+            logger.info(f"Usando habilidad aprendida: '{learned_skill['name']}'")
+            result = self.learner.execute_skill(learned_skill, user_input)
+            if result and not result.startswith("Error"):
+                response = f"Hecho, señor. (habilidad aprendida) {result}"
+                self.memory.save_message("assistant", response)
+                return response
 
         # Verificar saludos / despedidas
         if self.parser.is_greeting(user_input):
@@ -268,6 +283,15 @@ class Orchestrator:
             # Reemplazar la respuesta falsa del LLM por confirmación real
             clean_response = f"Hecho, señor. {extra_info}"
 
+        # Paso 5: Detectar si JARVIS no supo hacer algo → investigar y aprender
+        if self._should_learn(user_input, clean_response, llm_intents, action_results):
+            logger.info("Detectado que no sé hacer esto. Investigando...")
+            learn_result = self.learner.research_and_learn(
+                user_input, failure_context=clean_response
+            )
+            if learn_result and not learn_result.startswith("Error"):
+                clean_response = learn_result
+
         self.memory.save_message("assistant", clean_response)
         return clean_response
 
@@ -324,6 +348,65 @@ class Orchestrator:
                 f"Error ejecutando {module_name}.{function_name}: {e}"
             )
             return f"Error ejecutando la acción: {e}"
+
+    # ─── Detección de necesidad de aprendizaje ─────────────────
+
+    def _should_learn(self, user_input: str, response: str,
+                      llm_intents: list, action_results: list) -> bool:
+        """
+        Detecta si JARVIS no supo hacer lo que el usuario pidió
+        y debería intentar investigar y aprender.
+
+        Condiciones para aprender:
+        - El LLM respondió que no puede hacerlo
+        - No se ejecutó ninguna acción
+        - El usuario parece querer una acción (no solo conversar)
+        """
+        # Si se ejecutaron acciones con éxito, no hay que aprender
+        if action_results:
+            return False
+
+        # Si hubo intenciones del LLM que se ejecutaron, no aprender
+        if llm_intents:
+            return False
+
+        # Detectar si la respuesta indica que no supo hacerlo
+        failure_indicators = [
+            "no puedo", "no he podido", "me temo",
+            "no sé cómo", "no tengo acceso", "no soy capaz",
+            "no puedo acceder", "no dispongo", "no es posible",
+            "no tengo la capacidad", "fuera de mi alcance",
+            "no puedo completar", "i can't", "i cannot",
+        ]
+        response_lower = response.lower()
+        is_failure = any(f in response_lower for f in failure_indicators)
+
+        if not is_failure:
+            return False
+
+        # Verificar que el usuario quería una acción (no solo conversar)
+        action_indicators = [
+            r"\b(?:haz|hacer|hazme|hazmelo)\b",
+            r"\b(?:abre|abrir|abrirme|ábreme)\b",
+            r"\b(?:pon|poner|ponme)\b",
+            r"\b(?:busca|buscar)\b",
+            r"\b(?:crea|crear)\b",
+            r"\b(?:escribe|escribir|escríbelo)\b",
+            r"\b(?:mira|mirar|lee|leer)\b",
+            r"\b(?:cambia|cambiar)\b",
+            r"\b(?:instala|instalar)\b",
+            r"\b(?:configura|configurar)\b",
+            r"\b(?:mueve|mover)\b",
+            r"\b(?:resuelve|resolver)\b",
+            r"\b(?:ejecuta|ejecutar)\b",
+            r"\b(?:descarga|descargar)\b",
+        ]
+        user_wants_action = any(
+            re.search(p, user_input, re.IGNORECASE)
+            for p in action_indicators
+        )
+
+        return user_wants_action
 
     # ─── Correcciones / aprendizaje ─────────────────────────
 
@@ -702,6 +785,23 @@ class Orchestrator:
             logger.error(f"Error en solve_screen_exercises: {e}")
             self._restore_jarvis_window()  # Asegurar que JARVIS vuelve
             return f"Error al resolver ejercicios de pantalla: {e}"
+
+    # ─── Aprendizaje ──────────────────────────────────────────
+
+    def list_learned_skills(self) -> str:
+        """Lista todas las habilidades que JARVIS ha aprendido."""
+        return self.learner.list_skills()
+
+    def forget_skill(self, skill_name: str) -> str:
+        """Elimina una habilidad aprendida."""
+        return self.learner.forget_skill(skill_name)
+
+    def research_topic(self, topic: str) -> str:
+        """Investiga proactivamente cómo hacer algo."""
+        logger.info(f"Investigación solicitada: '{topic}'")
+        return self.learner.research_and_learn(
+            topic, failure_context="Investigación solicitada por el usuario"
+        )
 
     def _minimize_jarvis_window(self):
         """Minimiza la ventana de JARVIS para no tapar la pantalla."""

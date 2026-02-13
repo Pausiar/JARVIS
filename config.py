@@ -74,6 +74,15 @@ CAPACIDADES DE INTERACCIÓN CON PANTALLA Y APLICACIONES:
 - Ejemplo: "mira el ejercicio 2 en google y hazmelo en intellij" → SÍ puedes hacerlo.
 - Para estas tareas multi-app usa: [ACTION:{"module":"orchestrator","function":"solve_screen_exercises","params":{"source_app":"nombre_fuente","target_app":"nombre_destino","content_hint":"qué contenido buscar"}}]
 
+AUTOAPRENDIZAJE:
+- Si no sabes hacer algo, NO digas simplemente que no puedes. En vez de eso, INTENTA investigar cómo hacerlo.
+- Tienes un motor de aprendizaje que investiga, genera código Python, lo prueba, y guarda las habilidades que funcionan.
+- Ya tienes habilidades aprendidas de sesiones anteriores que se prueban automáticamente.
+- Si el usuario te pide algo nuevo que no sabes, responde: "No sé hacerlo todavía, señor, pero voy a investigar..." — el sistema se encargará de investigar.
+- NUNCA te rindas sin intentar. Si algo parece posible programáticamente, intenta averiguarlo.
+- El usuario puede pedirte "aprende a hacer X" o "investiga cómo hacer X" para forzar investigación.
+- Puedes listar lo que has aprendido con "qué has aprendido" o "lista habilidades".
+
 Reglas:
 - Sé breve. No des explicaciones largas salvo que te lo pidan.
 - Si fallas: "Me temo que no he podido completar esa tarea, señor."
@@ -112,7 +121,10 @@ WHISPER_INITIAL_PROMPT = (
     "mira el ejercicio en el tab de Google, "
     "házmelo en IntelliJ, escríbelo en Word, "
     "ponlo en el documento, resuélvelo en IntelliJ, "
-    "coge lo de Chrome y hazlo en IntelliJ"
+    "coge lo de Chrome y hazlo en IntelliJ, "
+    "aprende a hacer, investiga cómo se hace, "
+    "qué has aprendido, lista habilidades, "
+    "olvida la habilidad, averigua cómo"
 )
 
 # ─── Piper TTS ────────────────────────────────────────────────
