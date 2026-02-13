@@ -663,6 +663,16 @@ class Orchestrator:
             clipboard_text = ""
             pdf_path = self._try_extract_pdf_path()
 
+            # LIMPIAR el portapapeles para que la URL no contamine el fallback
+            try:
+                subprocess.run(
+                    ["powershell", "-ExecutionPolicy", "Bypass", "-command",
+                     "Set-Clipboard -Value $null"],
+                    capture_output=True, text=True, timeout=3
+                )
+            except Exception:
+                pass
+
             if pdf_path:
                 # 4a. PDF LOCAL detectado → leer directamente con PyMuPDF
                 logger.info(f"PDF local detectado: {pdf_path}")
@@ -920,9 +930,10 @@ class Orchestrator:
             import fitz  # PyMuPDF
 
             doc = fitz.open(pdf_path)
+            num_pages = len(doc)
             all_text = []
 
-            for page_num in range(len(doc)):
+            for page_num in range(num_pages):
                 page = doc[page_num]
                 text = page.get_text()
                 if text and text.strip():
@@ -931,7 +942,7 @@ class Orchestrator:
             doc.close()
 
             full_text = "\n\n".join(all_text)
-            logger.info(f"PDF leído: {len(doc)} páginas, {len(full_text)} chars")
+            logger.info(f"PDF leído: {num_pages} páginas, {len(full_text)} chars")
             return full_text
 
         except ImportError:
