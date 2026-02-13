@@ -105,6 +105,25 @@ Reglas:
   [ACTION:{"module":"system_control","function":"focus_window","params":{"app_name":"intellij"}}]
   [ACTION:{"module":"orchestrator","function":"solve_screen_exercises","params":{"source_app":"google","target_app":"intellij","content_hint":"ejercicio 2"}}]
 - Puedes mantener conversaciones naturales. Responde a preguntas generales con tu conocimiento.
+
+COMANDOS COMPLEJOS MULTI-PASO (NAVEGACIÓN WEB, WORKFLOWS):
+- Cuando el usuario da instrucciones complejas con varios pasos (ej: "abre google y entra en aules fp busca la asignatura interfaces y la entrega del tema 6 para entregar el doc"), NO ejecutes cada verbo literalmente por separado.
+- INTERPRETA LA INTENCIÓN GLOBAL del usuario. "busca X" después de "entra en Y" significa buscar DENTRO de Y, no buscar en Google.
+- Genera ACTIONs secuenciales que tengan sentido como flujo conectado. El sistema las ejecutará una tras otra.
+- Acciones disponibles para navegación web multi-paso:
+  [ACTION:{"module":"system_control","function":"open_application","params":{"app_name":"chrome"}}] — abrir/enfocar navegador
+  [ACTION:{"module":"system_control","function":"navigate_to_url","params":{"url":"https://aulesfp.com"}}] — ir a una URL (Ctrl+L + escribir + Enter)
+  [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"texto visible en pantalla"}}] — hacer clic en un elemento visible
+  [ACTION:{"module":"system_control","function":"search_in_page","params":{"text":"término"}}] — buscar en el buscador de la página/app activa (NO en Google)
+  [ACTION:{"module":"system_control","function":"type_in_app","params":{"text":"texto a escribir"}}] — escribir en un campo activo
+  [ACTION:{"module":"system_control","function":"scroll_page","params":{"direction":"down"}}] — hacer scroll
+- Ejemplo completo para "abre google y entra en aules fp busca interfaces y la entrega del tema 6":
+  Voy a navegar a aules fp y buscar la asignatura, señor.
+  [ACTION:{"module":"system_control","function":"open_application","params":{"app_name":"chrome"}}]
+  [ACTION:{"module":"system_control","function":"navigate_to_url","params":{"url":"aules fp"}}]
+  [ACTION:{"module":"system_control","function":"search_in_page","params":{"text":"interfaces"}}]
+- Si no conoces la URL exacta, usa navigate_to_url con el nombre del sitio (se escribirá en la barra de direcciones y el navegador buscará).
+- NUNCA conviertas "busca X" en una búsqueda de Google cuando el contexto indica que el usuario quiere buscar DENTRO de una app/web concreta.
 """
 
 # ─── Whisper (STT) ────────────────────────────────────────────
@@ -134,7 +153,10 @@ WHISPER_INITIAL_PROMPT = (
     "coge lo de Chrome y hazlo en IntelliJ, "
     "aprende a hacer, investiga cómo se hace, "
     "qué has aprendido, lista habilidades, "
-    "olvida la habilidad, averigua cómo"
+    "olvida la habilidad, averigua cómo, "
+    "entra en aules fp, navega a classroom, "
+    "busca la asignatura, la entrega del tema, "
+    "abre otro tab de google, entrega el doc"
 )
 
 # ─── Piper TTS ────────────────────────────────────────────────

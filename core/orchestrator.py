@@ -165,65 +165,72 @@ class Orchestrator:
             self.memory.save_message("assistant", response)
             return response
 
-        # Paso 1: Detección rápida — comandos compuestos ("abre X y busca Y")
-        compound_intents = self.parser.parse_compound(user_input)
-        if compound_intents:
-            results = []
-            unhandled_parts = []
-            for ci in compound_intents:
-                if ci.confidence >= 0.8:
-                    logger.info(f"Intención compuesta detectada: {ci}")
-                    r = self._execute_intent(ci)
-                    if r:
-                        results.append(r)
+        # Paso 0b: ¿Es un workflow complejo multi-paso?
+        # Si es así, saltar regex y dejar que el LLM interprete la intención.
+        _is_complex = self._is_complex_workflow(user_input)
+        if _is_complex:
+            logger.info("Comando complejo multi-paso detectado. Derivando al LLM.")
 
-            # Detectar partes del texto que no se pudieron parsear
-            # pero que podrían ser interacciones dentro de apps
-            _action_verbs_re = re.compile(
-                r"(?:entra|entrar|encuentra|encontrar|navega|navegar|"
-                r"haz\s+clic|pulsa|pincha|selecciona|escribe\s+en)\s+.+",
-                re.IGNORECASE,
-            )
-            # Buscar fragmentos no reconocidos en el texto original
-            text_parts = re.split(
-                r"\s+y\s+(?:luego\s+|después\s+|también\s+)?|\s*,\s*(?:y\s+)?",
-                user_input, flags=re.IGNORECASE,
-            )
-            for part in text_parts:
-                part = part.strip()
-                if part and _action_verbs_re.search(part):
-                    if not self.parser._match_patterns(part):
-                        # Intentar ejecutar como interacción dentro de app
-                        sc = self.modules.get("system_control")
-                        if sc:
-                            try:
-                                interact_result = sc.interact_with_app(part)
-                                results.append(interact_result)
-                            except Exception as e:
-                                logger.warning(f"Error en interacción: {e}")
+        if not _is_complex:
+            # Paso 1: Detección rápida — comandos compuestos ("abre X y busca Y")
+            compound_intents = self.parser.parse_compound(user_input)
+            if compound_intents:
+                results = []
+                unhandled_parts = []
+                for ci in compound_intents:
+                    if ci.confidence >= 0.8:
+                        logger.info(f"Intención compuesta detectada: {ci}")
+                        r = self._execute_intent(ci)
+                        if r:
+                            results.append(r)
+
+                # Detectar partes del texto que no se pudieron parsear
+                # pero que podrían ser interacciones dentro de apps
+                _action_verbs_re = re.compile(
+                    r"(?:entra|entrar|encuentra|encontrar|navega|navegar|"
+                    r"haz\s+clic|pulsa|pincha|selecciona|escribe\s+en)\s+.+",
+                    re.IGNORECASE,
+                )
+                # Buscar fragmentos no reconocidos en el texto original
+                text_parts = re.split(
+                    r"\s+y\s+(?:luego\s+|después\s+|también\s+)?|\s*,\s*(?:y\s+)?",
+                    user_input, flags=re.IGNORECASE,
+                )
+                for part in text_parts:
+                    part = part.strip()
+                    if part and _action_verbs_re.search(part):
+                        if not self.parser._match_patterns(part):
+                            # Intentar ejecutar como interacción dentro de app
+                            sc = self.modules.get("system_control")
+                            if sc:
+                                try:
+                                    interact_result = sc.interact_with_app(part)
+                                    results.append(interact_result)
+                                except Exception as e:
+                                    logger.warning(f"Error en interacción: {e}")
+                                    unhandled_parts.append(part)
+                            else:
                                 unhandled_parts.append(part)
-                        else:
-                            unhandled_parts.append(part)
 
-            if results:
-                response = "Hecho, señor. " + " | ".join(results)
-                if unhandled_parts:
-                    response += (
-                        "\n\nAlgunas acciones no se pudieron completar: "
-                        + "; ".join(f'"{p}"' for p in unhandled_parts)
-                    )
-                self.memory.save_message("assistant", response)
-                return response
+                if results:
+                    response = "Hecho, señor. " + " | ".join(results)
+                    if unhandled_parts:
+                        response += (
+                            "\n\nAlgunas acciones no se pudieron completar: "
+                            + "; ".join(f'"{p}"' for p in unhandled_parts)
+                        )
+                    self.memory.save_message("assistant", response)
+                    return response
 
-        # Paso 1b: Detección simple por patrones
-        intent = self.parser.parse(user_input)
-        if intent and intent.confidence >= 0.8:
-            logger.info(f"Intención directa detectada: {intent}")
-            result = self._execute_intent(intent)
-            if result:
-                response = f"Hecho, señor. {result}"
-                self.memory.save_message("assistant", response)
-                return response
+            # Paso 1b: Detección simple por patrones
+            intent = self.parser.parse(user_input)
+            if intent and intent.confidence >= 0.8:
+                logger.info(f"Intención directa detectada: {intent}")
+                result = self._execute_intent(intent)
+                if result:
+                    response = f"Hecho, señor. {result}"
+                    self.memory.save_message("assistant", response)
+                    return response
 
         # Paso 2: Usar el LLM para entender la petición
         # Detectar si el usuario EXPLÍCITAMENTE pide leer/ver la pantalla
@@ -303,6 +310,81 @@ class Orchestrator:
 
         self.memory.save_message("assistant", clean_response)
         return clean_response
+
+    # ─── Detección de workflows complejos ─────────────────────
+
+    def _is_complex_workflow(self, text: str) -> bool:
+        """
+        Detecta si el texto describe un flujo de trabajo complejo multi-paso
+        que debe ser interpretado por el LLM en lugar del parser regex.
+
+        Ejemplos que SÍ son complejos:
+        - "abre google y entra en aules fp busca la asignatura interfaces"
+        - "ve a chrome, navega a classroom y descarga el PDF del tema 3"
+        - "abre otro tab busca aules fp entra en interfaces y entrega el doc"
+
+        Ejemplos que NO son complejos (1-2 acciones simples):
+        - "abre chrome"  (1 acción)
+        - "abre spotify y pon música"  (2 acciones claras e independientes)
+        - "busca el tiempo en Madrid"  (1 acción)
+        - "sube el volumen y baja el brillo"  (2 acciones independientes)
+        """
+        text_lower = text.lower()
+
+        # Contar verbos de acción distintos en el texto
+        action_matches = re.findall(
+            r'\b(?:abre|abrir|busca|buscar|entra|entrar|navega|navegar|'
+            r'encuentra|encontrar|selecciona|seleccionar|escoge|escoger|'
+            r'haz\s+clic|pulsa|pincha|click|clic|descarga|descargar|'
+            r'sube|subir|entrega|entregar|envía|enviar|coge|coger|'
+            r've\s+a|vete|mira|lee|leer)\b',
+            text_lower
+        )
+
+        # Detectar verbos de navegación dentro de sitio/app
+        has_navigate_into = bool(re.search(
+            r'\b(?:entra|entrar|navega|navegar|ve\s+a|vete|métete)'
+            r'\s+(?:en|a|al|dentro)',
+            text_lower
+        ))
+        has_search_or_find = bool(re.search(
+            r'\b(?:busca|buscar|encuentra|encontrar)\b', text_lower
+        ))
+        has_open = bool(re.search(
+            r'\b(?:abre|abrir|open)\b', text_lower
+        ))
+
+        # Si hay navegación + búsqueda ("entra en X y busca Y")
+        # → es un workflow dentro de un sitio, no acciones independientes
+        if has_navigate_into and has_search_or_find:
+            return True
+
+        # Si hay abrir + navegar dentro ("abre chrome y entra en classroom")
+        if has_open and has_navigate_into:
+            return True
+
+        # Si hay 3+ verbos de acción, es un workflow multi-paso
+        if len(action_matches) >= 3:
+            return True
+
+        # Si tiene finalidad encadenada ("para entregar/subir/enviar")
+        if re.search(
+            r'\bpara\s+(?:entregar|subir|enviar|descargar|copiar|ver|'
+            r'buscar|hacer|completar|rellenar|abrir)',
+            text_lower
+        ):
+            if len(action_matches) >= 2:
+                return True
+
+        # Si menciona múltiples destinos de navegación
+        # ("entra en X busca Y en Z")
+        nav_targets = re.findall(
+            r'\b(?:entra|navega|ve)\s+(?:en|a|al)\s+\S+', text_lower
+        )
+        if len(nav_targets) >= 2:
+            return True
+
+        return False
 
     # ─── Ejecución de intenciones ─────────────────────────────
 
