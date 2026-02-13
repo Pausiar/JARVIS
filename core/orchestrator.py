@@ -363,6 +363,20 @@ class Orchestrator:
         if has_open and has_navigate_into:
             return True
 
+        # Si hay clic/click + selecciona/sube (workflow de subida de archivos)
+        has_click = bool(re.search(r'\b(?:haz\s+clic|click|clic|pulsa|pincha)\b', text_lower))
+        has_file_action = bool(re.search(
+            r'\b(?:selecciona|seleccionar|sube|subir|adjunta|adjuntar|'
+            r'elige|elegir|escoge|escoger|arrastra|arrastrar)\b', text_lower
+        ))
+        has_file_ref = bool(re.search(
+            r'(?:archivo|fichero|documento|pdf|\.pdf|\.doc|\.zip|carpeta|descargas|downloads)', text_lower
+        ))
+        if has_click and (has_file_action or has_file_ref):
+            return True
+        if has_file_action and has_file_ref:
+            return True
+
         # Si hay 3+ verbos de acción, es un workflow multi-paso
         if len(action_matches) >= 3:
             return True
