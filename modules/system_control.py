@@ -478,30 +478,29 @@ class SystemControl:
         """
         Busca texto visible en pantalla y hace clic en él.
         Estrategia escalonada:
-        1. UI Automation (rápido, funciona con apps nativas)
-        2. OCR con Windows Media OCR (funciona con todo, incluyendo Chrome/Discord)
-        3. Fallback: Ctrl+F + Enter (navega al resultado)
+        1. Ctrl+F para encontrar → detectar highlight naranja → clic en él
+        2. UI Automation con validación estricta
+        3. Último recurso: clic en la zona central donde Chrome muestra el match
         """
         import pyautogui
         try:
             # Esperar a que la UI se estabilice
             time.sleep(wait)
 
-            # 1. Intentar con UI Automation (rápido)
+            # ─── Estrategia 1: Ctrl+F → detectar highlight → clic ────
+            result = self._click_via_ctrlf_highlight(text)
+            if result:
+                time.sleep(2.5)
+                return result
+
+            # ─── Estrategia 2: UI Automation con validación estricta ──
             result = self._find_and_click_ui_element(text)
             if result:
-                # Esperar a que cargue la nueva página/vista
                 time.sleep(2.5)
                 return result
 
-            # 2. Intentar con OCR de pantalla (funciona con Chrome, Discord, etc.)
+            # ─── Estrategia 3: OCR ───────────────────────────────────
             result = self._find_and_click_via_ocr(text)
-            if result:
-                time.sleep(2.5)
-                return result
-
-            # 3. Fallback: buscar con Ctrl+F, luego re-intentar clic
-            result = self._click_via_accessibility(text)
             if result:
                 time.sleep(2.5)
                 return result
@@ -511,84 +510,16 @@ class SystemControl:
             logger.error(f"Error haciendo clic en '{text}': {e}")
             return f"Error al intentar hacer clic en '{text}': {e}"
 
-    def _find_and_click_ui_element(self, text: str) -> Optional[str]:
+    def _click_via_ctrlf_highlight(self, text: str) -> Optional[str]:
         """
-        Busca un elemento UI por texto usando la API de Windows UI Automation
-        a través de PowerShell.
+        Usa Ctrl+F para buscar el texto → Chrome lo resalta en naranja/amarillo.
+        Captura screenshot → detecta el rectángulo de color del highlight → clic.
+        Si no detecta el color, cierra Ctrl+F y hace clic en la zona scrolleada.
         """
+        import pyautogui
+        import numpy as np
+        from PIL import Image
         try:
-            # Escapar caracteres problemáticos para PowerShell
-            safe_text = text.replace('"', '`"').replace("'", "''")
-            # Usar PowerShell para buscar elementos de UI con el texto
-            ps_script = f'''
-            Add-Type -AssemblyName UIAutomationClient
-            Add-Type -AssemblyName UIAutomationTypes
-            $root = [System.Windows.Automation.AutomationElement]::RootElement
-            $searchText = "{safe_text}"
-            $condition = New-Object System.Windows.Automation.PropertyCondition(
-                [System.Windows.Automation.AutomationElement]::NameProperty,
-                $searchText
-            )
-            $element = $root.FindFirst(
-                [System.Windows.Automation.TreeScope]::Descendants,
-                $condition
-            )
-            if ($element) {{
-                $rect = $element.Current.BoundingRectangle
-                $x = [int]($rect.X + $rect.Width / 2)
-                $y = [int]($rect.Y + $rect.Height / 2)
-                Write-Output "$x,$y"
-            }} else {{
-                # Búsqueda parcial - buscar elementos que contengan el texto
-                $allCondition = [System.Windows.Automation.Condition]::TrueCondition
-                $elements = $root.FindAll(
-                    [System.Windows.Automation.TreeScope]::Descendants,
-                    $allCondition
-                )
-                foreach ($el in $elements) {{
-                    try {{
-                        $name = $el.Current.Name
-                        if ($name -and $name -like "*$searchText*") {{
-                            $rect = $el.Current.BoundingRectangle
-                            if ($rect.Width -gt 0 -and $rect.Height -gt 0) {{
-                                $x = [int]($rect.X + $rect.Width / 2)
-                                $y = [int]($rect.Y + $rect.Height / 2)
-                                Write-Output "$x,$y"
-                                break
-                            }}
-                        }}
-                    }} catch {{}}
-                }}
-            }}
-            '''
-            result = subprocess.run(
-                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-                capture_output=True, text=True, timeout=10
-            )
-            output = result.stdout.strip()
-            if output and ',' in output:
-                coords = output.strip().split('\n')[-1]  # Last match
-                x, y = map(int, coords.split(','))
-                import pyautogui
-                pyautogui.click(x, y)
-                logger.info(f"Clic en elemento UI '{text}' en ({x}, {y})")
-                return f"Clic realizado en '{text}'"
-        except subprocess.TimeoutExpired:
-            logger.warning("Timeout buscando elemento UI")
-        except Exception as e:
-            logger.warning(f"Error en UI Automation: {e}")
-        return None
-
-    def _click_via_accessibility(self, text: str) -> Optional[str]:
-        """
-        Fallback: usa Ctrl+F para localizar el texto en pantalla,
-        luego cierra el buscador y re-intenta OCR para hacer clic real.
-        Si OCR falla, intenta hacer clic cerca del texto resaltado con Enter + Tab.
-        """
-        try:
-            import pyautogui
-            logger.info(f"Fallback: Ctrl+F para localizar '{text}' y luego clic...")
-
             # 1. Abrir Ctrl+F y buscar el texto
             pyautogui.hotkey('ctrl', 'f')
             time.sleep(0.5)
@@ -599,39 +530,167 @@ class SystemControl:
                 self._safe_set_clipboard(text)
                 pyautogui.hotkey('ctrl', 'v')
 
-            time.sleep(0.5)
+            time.sleep(0.8)
             pyautogui.press('enter')  # Ir al primer resultado
-            time.sleep(0.3)
-
-            # 2. Cerrar el buscador — el texto ya está scrolleado a la vista
-            pyautogui.press('escape')
             time.sleep(0.5)
 
-            # 3. Re-intentar OCR ahora que el texto está visible en pantalla
-            result = self._find_and_click_via_ocr(text)
-            if result:
-                logger.info(f"Fallback exitoso: OCR encontró '{text}' tras Ctrl+F")
-                return result
+            # 2. Capturar screenshot con el highlight visible
+            screenshot = pyautogui.screenshot()
+            img_array = np.array(screenshot)
 
-            # 4. Si OCR sigue sin funcionar, intentar UI Automation de nuevo
-            result = self._find_and_click_ui_element(text)
-            if result:
-                logger.info(f"Fallback exitoso: UI Automation encontró '{text}' tras Ctrl+F")
-                return result
+            # 3. Buscar el color naranja del highlight activo de Chrome
+            #    Chrome usa ~RGB(255, 150, 50) para el match activo
+            #    y ~RGB(255, 255, 0) para los otros matches.
+            #    Buscamos el naranja (match activo) primero.
+            # Rango naranja del highlight activo (Chrome)
+            orange_mask = (
+                (img_array[:, :, 0] >= 230) &  # R alto
+                (img_array[:, :, 1] >= 120) & (img_array[:, :, 1] <= 190) &  # G medio
+                (img_array[:, :, 2] <= 80)  # B bajo
+            )
 
-            # 5. Último recurso: usar Ctrl+F de nuevo, presionar Escape,
-            #    y simular clic en el centro del match resaltado.
-            #    Chrome deja el scroll en el match → hacemos clic en el centro de la pantalla
-            #    ajustado un poco arriba donde Chrome suele mostrar el resultado.
-            logger.info(f"Último recurso: clic aproximado en la zona del texto '{text}'")
-            screen_w, screen_h = pyautogui.size()
-            # El texto resaltado suele estar a ~40% desde arriba
-            pyautogui.click(screen_w // 2, int(screen_h * 0.40))
+            # Si no hay naranja, probar con amarillo (highlight pasivo)
+            if not np.any(orange_mask):
+                orange_mask = (
+                    (img_array[:, :, 0] >= 230) &  # R alto
+                    (img_array[:, :, 1] >= 220) &  # G alto
+                    (img_array[:, :, 2] <= 80)  # B bajo
+                )
+
+            # 4. Cerrar el buscador Ctrl+F
+            pyautogui.press('escape')
             time.sleep(0.3)
 
-            return f"Clic realizado en '{text}' (aproximado)"
+            if np.any(orange_mask):
+                # Encontrar las posiciones del highlight
+                ys, xs = np.where(orange_mask)
+                screen_h = img_array.shape[0]
+
+                # FILTRAR píxeles al content area ANTES de calcular mediana
+                # (excluir barra de tabs/Ctrl+F arriba y taskbar abajo)
+                content_filter = (ys > 120) & (ys < (screen_h - 80))
+                xs_filtered = xs[content_filter]
+                ys_filtered = ys[content_filter]
+
+                if len(xs_filtered) > 3:  # Al menos unos píxeles en el content
+                    cx = int(np.median(xs_filtered))
+                    cy = int(np.median(ys_filtered))
+                    pyautogui.click(cx, cy)
+                    logger.info(f"Ctrl+F highlight: clic en '{text}' en ({cx}, {cy})")
+                    return f"Clic realizado en '{text}'"
+                else:
+                    logger.info(f"Highlight encontrado pero solo fuera del content area ({len(xs)} px total)")
+
+            # 5. Si no detectamos el highlight, la página ya se scrolleó
+            #    al texto. Intentar clic en la zona visible.
+            logger.info(f"No se detectó highlight para '{text}'. Intentando clic en zona central.")
+
+            # Obtener la ventana activa para limitar el clic al viewport
+            screen_w, screen_h = pyautogui.size()
+            # Chrome content area: ~85px desde arriba (tabs+address bar),
+            # ~40px desde abajo (taskbar)
+            content_center_y = 85 + (screen_h - 85 - 40) // 2
+            content_center_x = screen_w // 2
+
+            # Hacer clic en el centro del contenido
+            pyautogui.click(content_center_x, content_center_y)
+            time.sleep(0.3)
+
+            return f"Clic realizado en '{text}' (zona central)"
+
         except Exception as e:
-            logger.warning(f"Error en búsqueda de accesibilidad: {e}")
+            logger.warning(f"Error en Ctrl+F highlight click: {e}")
+            # Asegurar que cerramos Ctrl+F si hubo error
+            try:
+                pyautogui.press('escape')
+            except Exception:
+                pass
+        return None
+
+    def _find_and_click_ui_element(self, text: str) -> Optional[str]:
+        """
+        Busca un elemento UI por texto usando la API de Windows UI Automation.
+        Validación estricta: solo elementos visibles, clicables, en el viewport.
+        """
+        try:
+            import pyautogui
+            screen_w, screen_h = pyautogui.size()
+
+            # Escapar caracteres problemáticos para PowerShell
+            safe_text = text.replace('"', '`"').replace("'", "''")
+            # Buscar elementos clicables (links, botones) que contengan el texto
+            # Filtrar: IsOffscreen=False, coordenadas dentro del content area
+            ps_script = f'''
+            Add-Type -AssemblyName UIAutomationClient
+            Add-Type -AssemblyName UIAutomationTypes
+            $root = [System.Windows.Automation.AutomationElement]::RootElement
+            $searchText = "{safe_text}"
+            
+            # Buscar SOLO elementos clicables: hyperlinks, buttons, list items
+            $allCondition = [System.Windows.Automation.Condition]::TrueCondition
+            $elements = $root.FindAll(
+                [System.Windows.Automation.TreeScope]::Descendants,
+                $allCondition
+            )
+            
+            $results = @()
+            foreach ($el in $elements) {{
+                try {{
+                    $name = $el.Current.Name
+                    if (-not $name) {{ continue }}
+                    if ($name -notlike "*$searchText*") {{ continue }}
+                    
+                    # Verificar que NO está fuera de pantalla
+                    if ($el.Current.IsOffscreen) {{ continue }}
+                    
+                    $rect = $el.Current.BoundingRectangle
+                    $x = [int]($rect.X + $rect.Width / 2)
+                    $y = [int]($rect.Y + $rect.Height / 2)
+                    
+                    # Validar coordenadas dentro del content area
+                    # (no en tabs ni taskbar: y > 80 y y < screen_h - 40)
+                    if ($x -le 0 -or $y -le 80) {{ continue }}
+                    if ($x -ge {screen_w} -or $y -ge {screen_h - 40}) {{ continue }}
+                    if ($rect.Width -le 5 -or $rect.Height -le 5) {{ continue }}
+                    if ($rect.Width -gt {screen_w} -or $rect.Height -gt 200) {{ continue }}
+                    
+                    # Preferir hyperlinks y botones sobre texto estático
+                    $ctrlType = $el.Current.ControlType.ProgrammaticName
+                    $priority = 2
+                    if ($ctrlType -eq "ControlType.Hyperlink") {{ $priority = 0 }}
+                    if ($ctrlType -eq "ControlType.Button") {{ $priority = 0 }}
+                    if ($ctrlType -eq "ControlType.ListItem") {{ $priority = 1 }}
+                    if ($ctrlType -eq "ControlType.Text") {{ $priority = 1 }}
+                    
+                    $results += "$priority|$x|$y|$ctrlType|$name"
+                }} catch {{}}
+            }}
+            
+            if ($results.Count -gt 0) {{
+                # Ordenar por prioridad (hyperlinks/buttons primero)
+                $sorted = $results | Sort-Object
+                $best = $sorted[0]
+                $parts = $best -split "\\|"
+                Write-Output "$($parts[1]),$($parts[2])"
+            }}
+            '''
+            result = subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                capture_output=True, text=True, timeout=10
+            )
+            output = result.stdout.strip()
+            if output and ',' in output:
+                coords = output.strip().split('\n')[-1]
+                x, y = map(int, coords.split(','))
+                pyautogui.click(x, y)
+                logger.info(f"UI Automation: clic en '{text}' en ({x}, {y})")
+                return f"Clic realizado en '{text}'"
+            else:
+                logger.info(f"UI Automation: '{text}' no encontrado con validación estricta")
+        except subprocess.TimeoutExpired:
+            logger.warning("Timeout buscando elemento UI")
+        except Exception as e:
+            logger.warning(f"Error en UI Automation: {e}")
         return None
 
     def _find_and_click_via_ocr(self, text: str) -> Optional[str]:
