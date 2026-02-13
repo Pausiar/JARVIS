@@ -138,9 +138,17 @@ REGLAS CLAVE DE NAVEGACIÓN WEB:
   [ACTION:{"module":"system_control","function":"open_application","params":{"app_name":"chrome"}}]
   [ACTION:{"module":"system_control","function":"navigate_to_url","params":{"url":"https://aules.edu.gva.es/fp/my/"}}]
   [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"interfícies"}}]
-  [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"Tema 6"}}]
   [ACTION:{"module":"system_control","function":"click_on_text","params":{"text":"Actividad Tema 6"}}]
   
+  IMPORTANTE: NO hagas clic en "Tema 6" a secas — eso es la teoría/PDF, NO la entrega.
+  Cuando el usuario dice "entrega", "actividad", "tarea" o "ejercicio", SIEMPRE busca "Actividad Tema X" (con la palabra "Actividad").
+  
+  ESTRUCTURA DE MOODLE/AULES:
+  - "Tema X" (nombre a secas) = contenido de teoría / PDF / documento
+  - "Actividad Tema X" = entrega / tarea / ejercicio (tiene icono rojo de subida)
+  - Cuando dicen "entrega del tema 6" → click_on_text("Actividad Tema 6"), NUNCA click_on_text("Tema 6")
+  - Si hay sección desplegable "Tema X", ya estará abierta. NO necesitas hacer clic en la sección.
+
   Fíjate: cada click_on_text navega a la siguiente página haciendo clic en un enlace visible.
   NO usa search_in_page. NO usa "busca" como Google search.
 
