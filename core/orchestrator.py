@@ -619,16 +619,11 @@ class Orchestrator:
 
         Flujo:
         1. Enfocar la app/pestaña fuente (donde está el contenido a leer)
-        2. Minimizar JARVIS para capturar pantalla limpia
-        3. OCR de la pantalla + scroll para capturar más
-        4. Restaurar JARVIS, enviar al LLM
-        5. Enfocar la app/pestaña destino, escribir soluciones
-
-        Args:
-            target_tab: "next" o "previous" — dirección si se usa cambio de pestaña (fallback).
-            source_app: Nombre de la app fuente (ej: "google", "chrome", "pdf"). Vacío = pantalla actual.
-            target_app: Nombre de la app destino (ej: "intellij", "google docs", "word"). Vacío = siguiente pestaña.
-            content_hint: Pista de qué buscar (ej: "ejercicio 2", "actividad 3"). Vacío = todo.
+        2. Minimizar JARVIS para no tapar el contenido
+        3. Ctrl+A Ctrl+C para copiar TODO el contenido al portapapeles
+        4. Leer el portapapeles → eso es el texto del ejercicio
+        5. Restaurar JARVIS, enviar al LLM
+        6. Enfocar la app/pestaña destino, escribir soluciones
         """
         import pyautogui
         sc = self.modules.get("system_control")
@@ -641,73 +636,52 @@ class Orchestrator:
                 logger.info(f"Enfocando app fuente: {source_app}")
                 focus_result = sc.focus_window(source_app)
                 logger.info(f"Focus result: {focus_result}")
-                time.sleep(1.5)  # Esperar a que la ventana se muestre
+                time.sleep(1.5)
 
             # 2. MINIMIZAR la ventana de JARVIS para que no tape el contenido
-            logger.info("Minimizando JARVIS para capturar pantalla...")
+            logger.info("Minimizando JARVIS para capturar contenido...")
             self._minimize_jarvis_window()
-            time.sleep(2.0)  # Esperar a que se minimice completamente
+            time.sleep(2.0)
 
             # 3. Dar foco al contenido (clic en zona derecha, evitando sidebars)
             screen_w, screen_h = pyautogui.size()
             click_x = int(screen_w * 0.65)
             click_y = int(screen_h * 0.40)
             pyautogui.click(click_x, click_y)
-            time.sleep(1.0)
+            time.sleep(0.5)
 
-            # 3. Leer la pantalla actual (PDF) — OCR sin truncar
-            logger.info("Leyendo ejercicios de la pantalla vía OCR...")
-            all_text_parts = []
+            # 4. CAPTURA VÍA PORTAPAPELES  (Ctrl+A → Ctrl+C)
+            #    Mucho más fiable que OCR para contenido web/PDFs en browser
+            logger.info("Capturando contenido vía Ctrl+A + Ctrl+C...")
+            pyautogui.hotkey('ctrl', 'a')   # Seleccionar todo
+            time.sleep(0.5)
+            pyautogui.hotkey('ctrl', 'c')   # Copiar
+            time.sleep(0.5)
 
-            # Primera captura (lo que se ve ahora)
-            screen_text = sc.get_screen_text_full()
-            logger.info(f"OCR captura inicial: {len(screen_text)} chars")
-            if screen_text and len(screen_text.strip()) > 20:
-                all_text_parts.append(screen_text)
-            else:
-                logger.warning(f"OCR devolvió texto insuficiente: '{screen_text[:100]}' ")
+            # Leer el portapapeles
+            import subprocess
+            clip_result = subprocess.run(
+                ["powershell", "-command", "Get-Clipboard"],
+                capture_output=True, text=True, timeout=5
+            )
+            clipboard_text = clip_result.stdout.strip()
+            logger.info(f"Portapapeles: {len(clipboard_text)} chars capturados")
 
-            # Scroll hacia abajo y capturar más páginas (hasta 8 scrolls)
-            # scroll(-20) = 20 notches hacia abajo (~1 página de PDF)
-            for i in range(8):
-                pyautogui.scroll(-20)  # Scroll down (mucho más agresivo)
-                time.sleep(1.5)  # Esperar renderizado (PDFs en browser son lentos)
+            # Deseleccionar para no dejar marcado (clic en cualquier sitio)
+            pyautogui.click(click_x, click_y)
+            time.sleep(0.3)
 
-                new_text = sc.get_screen_text_full()
-                if not new_text or len(new_text.strip()) < 20:
-                    break
-
-                # Evitar duplicados: comprobar overlap con texto anterior
-                if all_text_parts:
-                    prev_lines = set(l.strip() for l in all_text_parts[-1].split('\n') if l.strip())
-                    new_lines = [l.strip() for l in new_text.split('\n') if l.strip()]
-                    if new_lines:
-                        overlap_count = sum(1 for l in new_lines if l in prev_lines)
-                        overlap_ratio = overlap_count / len(new_lines)
-                        if overlap_ratio > 0.6:
-                            logger.info(f"Scroll {i+1}: >60% texto repetido, fin")
-                            break
-                        # Solo agregar líneas nuevas
-                        unique_lines = [l for l in new_lines if l not in prev_lines]
-                        if unique_lines:
-                            all_text_parts.append('\n'.join(unique_lines))
-                            logger.info(f"Scroll {i+1}: +{len(unique_lines)} líneas nuevas")
-                        continue
-
-                all_text_parts.append(new_text)
-                logger.info(f"Scroll {i+1}: +{len(new_text)} caracteres")
-
-            # 4. Restaurar ventana de JARVIS
+            # 5. Restaurar ventana de JARVIS
             self._restore_jarvis_window()
 
-            if not all_text_parts:
+            if not clipboard_text or len(clipboard_text.strip()) < 20:
                 return (
-                    "No pude leer texto en la pantalla, señor. "
-                    "Asegúrese de que el PDF esté visible y abierto en la pestaña activa."
+                    "No pude leer texto de la pantalla, señor. "
+                    "Asegúrese de que el contenido esté visible y seleccionable "
+                    "en la pestaña activa (PDF, Google Docs, web, etc.)."
                 )
 
-            # Combinar todo el texto capturado
-            full_content = "\n\n".join(all_text_parts)
+            full_content = clipboard_text
 
             # Truncar si es excesivamente largo para el LLM
             if len(full_content) > 15000:
