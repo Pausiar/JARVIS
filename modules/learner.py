@@ -81,6 +81,22 @@ class LearningEngine:
         except Exception:
             pass
 
+    # ─── Detección de respuestas erróneas ────────────────────
+
+    _ERROR_PHRASES = [
+        "no he podido", "me temo", "no puedo procesar",
+        "inténtelo de nuevo", "rate limit", "error:",
+        "límite de peticiones", "los comandos directos",
+        "espere un minuto", "sin acceso al llm",
+    ]
+
+    def _is_error_response(self, text: str) -> bool:
+        """Detecta si un texto es un mensaje de error (no debe guardarse como skill)."""
+        if not text or len(text) < 20:
+            return True
+        text_lower = text.lower()
+        return any(phrase in text_lower for phrase in self._ERROR_PHRASES)
+
     # ─── Búsqueda de habilidades ──────────────────────────────
 
     def find_skill(self, user_request: str) -> Optional[dict]:
@@ -114,7 +130,7 @@ class LearningEngine:
                     if kw.lower() in request_lower:
                         score += 0.3
 
-                if score > best_score and score >= 0.5:
+                if score > best_score and score >= 0.75:
                     best_score = score
                     best_match = skill
 
@@ -126,6 +142,55 @@ class LearningEngine:
         return best_match
 
     # ─── Ejecución de habilidades aprendidas ──────────────────
+
+    def _execute_python(self, code: str) -> str:
+        """
+        Ejecuta código Python en un proceso separado.
+        Valida imports antes de ejecutar.
+        """
+        # Validar que los imports estén disponibles
+        bad_imports = self._validate_imports(code)
+        if bad_imports:
+            return f"Error: módulos no disponibles: {', '.join(bad_imports)}"
+
+        result = self._test_code(code, timeout=30)
+        if result["success"]:
+            return result["output"]
+        else:
+            return f"Error al ejecutar: {result['error']}"
+
+    def _validate_imports(self, code: str) -> list[str]:
+        """
+        Verifica que todos los módulos importados en el código estén instalados.
+        Retorna lista de módulos faltantes.
+        """
+        import importlib
+
+        # Extraer imports del código
+        missing = []
+        for line in code.split('\n'):
+            line = line.strip()
+            if line.startswith('import '):
+                # 'import foo' or 'import foo, bar'
+                modules = line[7:].split(',')
+                for mod in modules:
+                    mod_name = mod.strip().split('.')[0].split(' as ')[0].strip()
+                    if mod_name:
+                        try:
+                            importlib.import_module(mod_name)
+                        except ImportError:
+                            missing.append(mod_name)
+            elif line.startswith('from '):
+                # 'from foo import bar'
+                parts = line.split(' import ')
+                if parts:
+                    mod_name = parts[0][5:].strip().split('.')[0]
+                    if mod_name:
+                        try:
+                            importlib.import_module(mod_name)
+                        except ImportError:
+                            missing.append(mod_name)
+        return missing
 
     def execute_skill(self, skill: dict, user_request: str = "") -> str:
         """
@@ -227,6 +292,19 @@ class LearningEngine:
                 # Paso 3: Probar el código
                 logger.info(f"Encontrados {len(code_blocks)} bloques de código. Probando...")
                 for i, code in enumerate(code_blocks):
+                    # Pre-validar imports
+                    bad_imports = self._validate_imports(code)
+                    if bad_imports:
+                        logger.warning(
+                            f"Bloque {i+1} usa módulos no instalados: {bad_imports}. Saltando."
+                        )
+                        research_entry["steps"].append({
+                            "step": f"test_code_{i+1}",
+                            "success": False,
+                            "output": f"Módulos no disponibles: {', '.join(bad_imports)}",
+                        })
+                        continue
+
                     logger.info(f"Probando bloque {i+1}...")
                     test_result = self._test_code(code)
 
@@ -259,12 +337,14 @@ class LearningEngine:
                 self._log_research(research_entry)
 
                 # Guardar como instrucciones (sin código ejecutable)
-                skill = self._create_skill(
-                    user_request, "", llm_response, None,
-                    skill_type="instructions"
-                )
-                self._skills.append(skill)
-                self._save_skills()
+                # Solo guardar si la respuesta NO es un mensaje de error
+                if not self._is_error_response(llm_response):
+                    skill = self._create_skill(
+                        user_request, "", llm_response, None,
+                        skill_type="instructions"
+                    )
+                    self._skills.append(skill)
+                    self._save_skills()
 
                 return (
                     f"He investigado sobre esto, señor. No he conseguido "
@@ -277,12 +357,14 @@ class LearningEngine:
                 research_entry["result"] = "no_code_found"
                 self._log_research(research_entry)
 
-                skill = self._create_skill(
-                    user_request, "", llm_response, None,
-                    skill_type="instructions"
-                )
-                self._skills.append(skill)
-                self._save_skills()
+                # Solo guardar si la respuesta NO es un mensaje de error
+                if not self._is_error_response(llm_response):
+                    skill = self._create_skill(
+                        user_request, "", llm_response, None,
+                        skill_type="instructions"
+                    )
+                    self._skills.append(skill)
+                    self._save_skills()
 
                 return llm_response
 
@@ -561,11 +643,23 @@ class LearningEngine:
             "1. Una explicación breve de cómo hacerlo\n"
             "2. Código Python COMPLETO y funcional que lo haga\n"
             "3. El código debe ser autónomo (sin pedir input al usuario)\n"
-            "4. Usa librerías estándar o comunes (subprocess, os, ctypes, pyautogui, requests)\n"
-            "5. El código debe funcionar en Windows\n"
-            "6. Envuelve todo el código en ```python ... ```\n"
-            "7. Si necesitas importar algo, incluye el import\n"
-            "8. Incluye manejo de errores básico\n\n"
+            "4. SOLO usa estas librerías (ya instaladas): "
+            "subprocess, os, sys, ctypes, pyautogui, requests, Pillow (PIL), "
+            "numpy, psutil, pyperclip, json, re, pathlib, time, datetime, tempfile\n"
+            "5. NO uses pytesseract, opencv-python, selenium, ni librerías que no estén en la lista anterior\n"
+            "6. Para OCR en Windows, usa Windows.Media.Ocr vía PowerShell, NO pytesseract\n"
+            "7. El código debe funcionar en Windows\n"
+            "8. Envuelve todo el código en ```python ... ```\n"
+            "9. Si necesitas importar algo, incluye el import\n"
+            "10. Incluye manejo de errores básico\n"
+            "11. NO envuelvas imports en try/except — si un módulo es necesario, "
+            "debe fallar claramente si no está disponible\n"
+            "12. NUNCA uses rutas hardcodeadas como C:\\temp\\. "
+            "Usa tempfile.mkdtemp() o os.environ['TEMP'] para archivos temporales\n"
+            "13. NO intentes hacer OCR tú mismo. Si necesitas leer texto de pantalla, "
+            "simplemente imprime 'NECESITO_OCR' y el sistema lo gestionará\n"
+            "14. NO envuelvas el código principal en try/except genérico "
+            "que oculte errores — los errores deben ser visibles\n\n"
             "IMPORTANTE: Devuelve SOLO código Python en un bloque ```python```. "
             "Si no es posible hacerlo con código, explica por qué y da instrucciones textuales."
         )
@@ -650,11 +744,31 @@ class LearningEngine:
             output = result.stdout.strip()
             error = result.stderr.strip()
 
+            # Patrones de error a detectar (tanto en stderr como stdout)
+            error_patterns = [
+                'traceback', 'exception', 'modulenotfounderror',
+                'importerror', 'no module named', 'filenotfounderror',
+                'permissionerror', 'syntaxerror', 'nameerror',
+                'typeerror', 'valueerror', 'attributeerror',
+                'oserror', 'ioerror', 'keyerror', 'indexerror',
+                'errno', 'no such file', 'access denied',
+                'connectionerror', 'timeouterror',
+            ]
+            # Patrones de formato genérico de error (en print/f-string)
+            generic_error_patterns = [
+                'error:', 'error al ', 'failed to', 'cannot ',
+            ]
+            # También buscar en stdout — código con try/except imprime errores ahí
+            combined_output = (error + ' ' + output).lower()
+
             # Considerar éxito si no hay errores fatales
-            success = result.returncode == 0 and not any(
-                err in error.lower() for err in
-                ['traceback', 'error', 'exception', 'modulenotfounderror']
+            has_specific_error = any(
+                err in combined_output for err in error_patterns
             )
+            has_generic_error = any(
+                err in combined_output for err in generic_error_patterns
+            )
+            success = result.returncode == 0 and not has_specific_error and not has_generic_error
 
             return {
                 "success": success,

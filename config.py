@@ -42,15 +42,15 @@ OLLAMA_MODEL = "mistral"  # Opciones: mistral, llama3, phi3
 
 # ─── Modo de IA: "local" (Ollama) o "cloud" (API gratuita) ──
 # "local" = usa Ollama en tu PC (necesita RAM/CPU)
-# "cloud" = usa API gratuita (Groq o Gemini), no consume recursos
+# "cloud" = usa API cloud (GitHub Models, Gemini), no consume recursos
 BRAIN_MODE = "cloud"  # Cambiar a "local" si tienes buen hardware
 
-# ─── Proveedores Cloud (APIs gratuitas) ──────────────────────
-# Groq: https://console.groq.com/keys (gratis, rápido)
+# ─── Proveedores Cloud ───────────────────────────────────────
+# GitHub Models: https://github.com/settings/tokens (Personal Access Token)
 # Gemini: https://aistudio.google.com/apikey (gratis, generoso)
-CLOUD_PROVIDER = "groq"  # "groq" o "gemini"
-GROQ_API_KEY = ""  # Se carga desde data/config.json (usar: "configura api key groq TU_KEY")
-GROQ_MODEL = "llama-3.3-70b-versatile"  # Modelo Groq (gratis)
+CLOUD_PROVIDER = "github"  # "github" o "gemini"
+GITHUB_TOKEN = ""  # Se carga desde data/config.json (usar: "configura api key github TU_KEY")
+GITHUB_MODEL = "gpt-4o-mini"  # Modelo GitHub Models (20K req/día, rápido y barato)
 GEMINI_API_KEY = ""  # Se carga desde data/config.json (usar: "configura api key gemini TU_KEY")
 GEMINI_MODEL = "gemini-2.0-flash"  # Modelo Gemini (gratis)
 
@@ -262,8 +262,8 @@ DEFAULT_CONFIG = {
     "language": "es",
     "brain_mode": BRAIN_MODE,
     "cloud_provider": CLOUD_PROVIDER,
-    "groq_api_key": GROQ_API_KEY,
-    "groq_model": GROQ_MODEL,
+    "github_token": GITHUB_TOKEN,
+    "github_model": GITHUB_MODEL,
     "gemini_api_key": GEMINI_API_KEY,
     "gemini_model": GEMINI_MODEL,
     "ollama_model": OLLAMA_MODEL,
@@ -316,9 +316,9 @@ def get_config_value(key: str, default=None):
 USER_CONFIG = load_config()
 
 # ─── Cargar API keys desde config.json (nunca hardcodear en source) ──
-# Si el usuario configuró su key con "configura api key groq/gemini XXX",
+# Si el usuario configuró su key con "configura api key github/gemini XXX",
 # se carga aquí. Si no, queda vacío y JARVIS pedirá que la configure.
-if USER_CONFIG.get("groq_api_key"):
-    GROQ_API_KEY = USER_CONFIG["groq_api_key"]
+if USER_CONFIG.get("github_token"):
+    GITHUB_TOKEN = USER_CONFIG["github_token"]
 if USER_CONFIG.get("gemini_api_key"):
     GEMINI_API_KEY = USER_CONFIG["gemini_api_key"]

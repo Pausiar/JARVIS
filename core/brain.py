@@ -1,6 +1,6 @@
 """
 J.A.R.V.I.S. — Brain (Cerebro)
-Motor de inteligencia dual: Local (Ollama) y Cloud (Groq/Gemini).
+Motor de inteligencia dual: Local (Ollama) y Cloud (GitHub Models/Gemini).
 Gestiona la conversación, personalidad y razonamiento de JARVIS.
 """
 
@@ -23,8 +23,8 @@ from config import (
     USER_CONFIG,
     BRAIN_MODE,
     CLOUD_PROVIDER,
-    GROQ_API_KEY,
-    GROQ_MODEL,
+    GITHUB_TOKEN,
+    GITHUB_MODEL,
     GEMINI_API_KEY,
     GEMINI_MODEL,
 )
@@ -33,11 +33,11 @@ logger = logging.getLogger("jarvis.brain")
 
 
 class JarvisBrain:
-    """Motor de inteligencia de JARVIS — dual: local (Ollama) o cloud (Groq/Gemini)."""
+    """Motor de inteligencia de JARVIS — dual: local (Ollama) o cloud (GitHub Models/Gemini)."""
 
     # ─── Configuración de proveedores cloud ───────────────────
     CLOUD_ENDPOINTS = {
-        "groq": "https://api.groq.com/openai/v1/chat/completions",
+        "github": "https://models.inference.ai.azure.com/chat/completions",
         "gemini": "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
     }
 
@@ -54,8 +54,8 @@ class JarvisBrain:
         # Modo de operación: "local" o "cloud"
         self.mode = USER_CONFIG.get("brain_mode", BRAIN_MODE)
         self.cloud_provider = USER_CONFIG.get("cloud_provider", CLOUD_PROVIDER)
-        self.groq_api_key = USER_CONFIG.get("groq_api_key", GROQ_API_KEY)
-        self.groq_model = USER_CONFIG.get("groq_model", GROQ_MODEL)
+        self.github_token = USER_CONFIG.get("github_token", GITHUB_TOKEN)
+        self.github_model = USER_CONFIG.get("github_model", GITHUB_MODEL)
         self.gemini_api_key = USER_CONFIG.get("gemini_api_key", GEMINI_API_KEY)
         self.gemini_model = USER_CONFIG.get("gemini_model", GEMINI_MODEL)
 
@@ -93,10 +93,10 @@ class JarvisBrain:
             return "Modo cambiado a LOCAL (Ollama). Usando procesamiento en su equipo, señor."
 
     def set_cloud_provider(self, provider: str) -> str:
-        """Cambia el proveedor cloud (groq o gemini)."""
+        """Cambia el proveedor cloud (github o gemini)."""
         provider = provider.lower().strip()
-        if provider not in ("groq", "gemini"):
-            return f"Proveedor '{provider}' no soportado. Use 'groq' o 'gemini'."
+        if provider not in ("github", "gemini"):
+            return f"Proveedor '{provider}' no soportado. Use 'github' o 'gemini'."
         self.cloud_provider = provider
         try:
             from config import load_config, save_config
@@ -109,8 +109,8 @@ class JarvisBrain:
 
     def _get_cloud_api_key(self) -> str:
         """Obtiene la API key del proveedor cloud actual."""
-        if self.cloud_provider == "groq":
-            return self.groq_api_key
+        if self.cloud_provider == "github":
+            return self.github_token
         elif self.cloud_provider == "gemini":
             return self.gemini_api_key
         return ""
@@ -120,7 +120,7 @@ class JarvisBrain:
         if self.mode == "cloud":
             provider = self.cloud_provider
             has_key = "✅" if self._get_cloud_api_key() else "❌ sin API key"
-            model = self.groq_model if provider == "groq" else self.gemini_model
+            model = self.github_model if provider == "github" else self.gemini_model
             return f"Modo: CLOUD | Proveedor: {provider} | Modelo: {model} | API key: {has_key}"
         else:
             return f"Modo: LOCAL | Modelo: {self.model} | Host: {self.host}"
@@ -270,7 +270,7 @@ class JarvisBrain:
     def chat(self, user_message: str, context: str = "") -> str:
         """
         Envía un mensaje al LLM y obtiene la respuesta.
-        Enruta automáticamente entre modo local (Ollama) y cloud (Groq/Gemini).
+        Enruta automáticamente entre modo local (Ollama) y cloud (GitHub Models/Gemini).
         """
         if context:
             full_message = f"[CONTEXTO ADICIONAL: {context}]\n\nUsuario: {user_message}"
@@ -296,10 +296,19 @@ class JarvisBrain:
 
         return result
 
-    # ─── Chat Cloud (Groq / Gemini) ──────────────────────────
+    def chat_raw(self, messages: list[dict]) -> str:
+        """
+        Envía mensajes directamente a la API cloud sin historial ni system prompt.
+        Usado por el agente autónomo para decisiones rápidas.
+        """
+        if self.mode == "cloud":
+            return self._chat_cloud(messages)
+        return self._chat_local(messages)
+
+    # ─── Chat Cloud (GitHub Models / Gemini) ─────────────────
 
     def _chat_cloud(self, messages: list[dict]) -> str:
-        """Chat usando API cloud (Groq o Gemini). Rápido, sin consumo local."""
+        """Chat usando API cloud (GitHub Models o Gemini). Rápido, sin consumo local."""
         api_key = self._get_cloud_api_key()
         if not api_key:
             return (
@@ -307,15 +316,15 @@ class JarvisBrain:
                 f"Añada '{self.cloud_provider}_api_key' en data/config.json."
             )
 
-        if self.cloud_provider == "groq":
-            return self._chat_groq(messages, api_key)
+        if self.cloud_provider == "github":
+            return self._chat_github(messages, api_key)
         elif self.cloud_provider == "gemini":
             return self._chat_gemini(messages, api_key)
         else:
             return f"Proveedor cloud '{self.cloud_provider}' no soportado."
 
-    def _chat_groq(self, messages: list[dict], api_key: str) -> str:
-        """Chat con Groq API (formato OpenAI-compatible)."""
+    def _chat_github(self, messages: list[dict], api_key: str) -> str:
+        """Chat con GitHub Models API (formato OpenAI-compatible)."""
         try:
             # Calcular max_tokens dinámicamente:
             # - Mensajes largos (ejercicios, documentos) → necesitan respuestas largas
@@ -328,44 +337,77 @@ class JarvisBrain:
                 max_tokens = 1024
                 timeout = 30
 
-            resp = requests.post(
-                self.CLOUD_ENDPOINTS["groq"],
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": self.groq_model,
-                    "messages": messages,
-                    "temperature": 0.7,
-                    "max_tokens": max_tokens,
-                },
-                timeout=timeout,
-            )
+            # gpt-4o-mini y gpt-4o usan max_tokens + temperature
+            # gpt-5-* usan max_completion_tokens y no soportan temperature
+            model_lower = self.github_model.lower()
+            is_new_model = model_lower.startswith("gpt-5") or model_lower.startswith("raptor")
 
-            if resp.status_code == 200:
-                data = resp.json()
-                content = data["choices"][0]["message"]["content"]
-                logger.info(f"Groq: respuesta de {len(content)} chars")
-                return content
-            elif resp.status_code == 429:
-                logger.warning("Groq: rate limit alcanzado")
-                return "He alcanzado el límite de peticiones por minuto, señor. Espere un momento."
-            elif resp.status_code == 401:
-                logger.error("Groq: API key inválida")
-                return "La API key de Groq no es válida, señor. Verifique la configuración."
+            body = {
+                "model": self.github_model,
+                "messages": messages,
+            }
+            if is_new_model:
+                body["max_completion_tokens"] = max_tokens
             else:
-                error = resp.text[:200]
-                logger.error(f"Groq error HTTP {resp.status_code}: {error}")
-                return f"Error con Groq (HTTP {resp.status_code}), señor."
+                body["max_tokens"] = max_tokens
+                body["temperature"] = 0.7
+
+            # Intentar con retry automático en caso de rate limit
+            max_retries = 3
+            for attempt in range(max_retries):
+                resp = requests.post(
+                    self.CLOUD_ENDPOINTS["github"],
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=body,
+                    timeout=timeout,
+                )
+
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    logger.info(f"GitHub Models ({self.github_model}): respuesta de {len(content)} chars")
+                    if not content or not content.strip():
+                        logger.warning("GitHub Models: respuesta vacía, reintentando...")
+                        if attempt < max_retries - 1:
+                            time.sleep(2)
+                            continue
+                        return "Me temo que no he obtenido respuesta del servidor, señor."
+                    return content
+                elif resp.status_code == 429:
+                    # Rate limit — esperar y reintentar
+                    wait_time = 5
+                    try:
+                        retry_after = resp.headers.get("Retry-After", "")
+                        if retry_after and retry_after.isdigit():
+                            wait_time = min(int(retry_after), 30)
+                    except Exception:
+                        pass
+                    if attempt < max_retries - 1:
+                        logger.info(f"GitHub Models: rate limit, esperando {wait_time}s (intento {attempt+1}/{max_retries})")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        logger.warning("GitHub Models: rate limit agotado tras reintentos")
+                        return ("No he podido procesar la petición ahora mismo, señor. "
+                                "Inténtelo de nuevo en unos segundos.")
+                elif resp.status_code == 401:
+                    logger.error("GitHub Models: token inválido")
+                    return "El GitHub Token no es válido, señor. Verifique la configuración."
+                else:
+                    error = resp.text[:200]
+                    logger.error(f"GitHub Models error HTTP {resp.status_code}: {error}")
+                    return f"Error con GitHub Models (HTTP {resp.status_code}), señor."
 
         except requests.Timeout:
-            return "Groq ha tardado demasiado en responder, señor."
+            return "GitHub Models ha tardado demasiado en responder, señor."
         except requests.ConnectionError:
-            return "No puedo conectar con Groq, señor. Verifique su conexión a internet."
+            return "No puedo conectar con GitHub Models, señor. Verifique su conexión a internet."
         except Exception as e:
-            logger.error(f"Error con Groq: {e}")
-            return f"Error inesperado con Groq: {e}"
+            logger.error(f"Error con GitHub Models: {e}")
+            return f"Error inesperado con GitHub Models: {e}"
 
     def _chat_gemini(self, messages: list[dict], api_key: str) -> str:
         """Chat con Google Gemini API."""

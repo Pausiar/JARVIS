@@ -54,7 +54,7 @@ def initialize_core():
         if brain._get_cloud_api_key():
             logger.info(f"  API key: ✅ Configurada")
         else:
-            logger.warning(f"  API key: ❌ No configurada — configure '{brain.cloud_provider}_api_key' en data/config.json")
+            logger.warning(f"  API key: ❌ No configurada — configure 'github_token' o 'gemini_api_key' en data/config.json")
     else:
         ollama_available = brain.is_available()
         ollama_status = "✅ Conectado" if ollama_available else "❌ No disponible"

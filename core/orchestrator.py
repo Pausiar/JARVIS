@@ -31,6 +31,7 @@ from modules.notifications import NotificationManager
 from modules.calendar_manager import CalendarManager
 from modules.plugin_loader import PluginLoader
 from modules.learner import LearningEngine
+from core.autonomous import AutonomousAgent
 
 logger = logging.getLogger("jarvis.orchestrator")
 
@@ -101,9 +102,14 @@ class Orchestrator:
         self.learner = LearningEngine()
         self.learner.set_brain(self.brain)
 
+        # Agente autónomo
+        sc = self.modules.get("system_control")
+        self.agent = AutonomousAgent(self.brain, sc, self.parser)
+
         # Último input para aprendizaje de correcciones
         self._last_user_input = ""
         self._last_action = ""
+        self._last_goal = ""  # Para follow-up de preguntas del agente
 
         logger.info(f"Orchestrator inicializado. {self.learner.get_skill_count()} habilidades aprendidas.")
 
@@ -144,17 +150,25 @@ class Orchestrator:
         # Guardar para posible corrección futura
         self._last_user_input = user_input
 
-        # Paso 0: Verificar si tenemos una habilidad aprendida para esto
-        learned_skill = self.learner.find_skill(user_input)
-        if learned_skill:
-            logger.info(f"Usando habilidad aprendida: '{learned_skill['name']}'")
-            result = self.learner.execute_skill(learned_skill, user_input)
-            if result and not result.startswith("Error"):
-                response = f"Hecho, señor. (habilidad aprendida) {result}"
+        # Paso 0: ¿Respuesta a una pregunta del agente autónomo?
+        if self.agent.has_pending_question():
+            # ¿El usuario está cambiando de tema o rechazando la tarea actual?
+            if self._is_topic_change(user_input):
+                logger.info("Cambio de tema detectado. Cancelando pregunta pendiente del agente.")
+                self.agent.clear_pending()
+                self._last_goal = ""
+                # Extraer la nueva petición del usuario (la parte después del rechazo)
+                new_request = self._extract_new_request(user_input)
+                if new_request:
+                    return self.process(new_request)
+                # Si no hay nueva petición clara, continuar con el flujo normal
+            else:
+                logger.info("Respondiendo a pregunta pendiente del agente autónomo.")
+                response = self.agent.answer_pending(user_input, self._last_goal)
                 self.memory.save_message("assistant", response)
                 return response
 
-        # Verificar saludos / despedidas
+        # ── Saludos / despedidas ──
         if self.parser.is_greeting(user_input):
             response = self._handle_greeting()
             self.memory.save_message("assistant", response)
@@ -165,149 +179,208 @@ class Orchestrator:
             self.memory.save_message("assistant", response)
             return response
 
-        # Paso 0b: ¿Es un workflow complejo multi-paso?
-        # Si es así, saltar regex y dejar que el LLM interprete la intención.
-        _is_complex = self._is_complex_workflow(user_input)
-        if _is_complex:
-            logger.info("Comando complejo multi-paso detectado. Derivando al LLM.")
+        # ── Respuestas locales instantáneas (hora, fecha, sistema) ──
+        local_answer = self._try_local_answer(user_input)
+        if local_answer:
+            logger.info("Respondido localmente sin LLM.")
+            self.memory.save_message("assistant", local_answer)
+            return local_answer
 
-        if not _is_complex:
-            # Paso 1: Detección rápida — comandos compuestos ("abre X y busca Y")
-            compound_intents = self.parser.parse_compound(user_input)
-            if compound_intents:
-                results = []
-                unhandled_parts = []
-                for ci in compound_intents:
-                    if ci.confidence >= 0.8:
-                        logger.info(f"Intención compuesta detectada: {ci}")
-                        r = self._execute_intent(ci)
-                        if r:
-                            results.append(r)
+        # ── Texto explicativo → aprender procedimiento ──
+        if self._is_explanatory_text(user_input):
+            logger.info("Texto explicativo detectado. Aprendiendo procedimiento...")
+            learn_response = self.agent.learn_from_user(user_input)
+            self.memory.save_message("assistant", learn_response)
+            return learn_response
 
-                # Detectar partes del texto que no se pudieron parsear
-                # pero que podrían ser interacciones dentro de apps
-                _action_verbs_re = re.compile(
-                    r"(?:entra|entrar|encuentra|encontrar|navega|navegar|"
-                    r"haz\s+clic|pulsa|pincha|selecciona|escribe\s+en)\s+.+",
-                    re.IGNORECASE,
-                )
-                # Buscar fragmentos no reconocidos en el texto original
-                text_parts = re.split(
-                    r"\s+y\s+(?:luego\s+|después\s+|también\s+)?|\s*,\s*(?:y\s+)?",
-                    user_input, flags=re.IGNORECASE,
-                )
-                for part in text_parts:
-                    part = part.strip()
-                    if part and _action_verbs_re.search(part):
-                        if not self.parser._match_patterns(part):
-                            # Intentar ejecutar como interacción dentro de app
-                            sc = self.modules.get("system_control")
-                            if sc:
-                                try:
-                                    interact_result = sc.interact_with_app(part)
-                                    results.append(interact_result)
-                                except Exception as e:
-                                    logger.warning(f"Error en interacción: {e}")
-                                    unhandled_parts.append(part)
-                            else:
-                                unhandled_parts.append(part)
+        # ── Comandos directos por regex (NO necesitan pantalla ni LLM) ──
+        # Solo: abrir app CONOCIDA, volumen, brillo, screenshot, etc.
+        fast_result = self._try_fast_command(user_input)
+        if fast_result:
+            logger.info(f"Comando rápido ejecutado: {fast_result[:80]}")
+            self.memory.save_message("assistant", fast_result)
+            return fast_result
 
-                if results:
-                    response = self._build_smart_response(results)
-                    if unhandled_parts:
-                        response += (
-                            "\n\nAlgunas acciones no se pudieron completar: "
-                            + "; ".join(f'"{p}"' for p in unhandled_parts)
-                        )
-                    self.memory.save_message("assistant", response)
-                    return response
-
-            # Paso 1b: Detección simple por patrones
-            intent = self.parser.parse(user_input)
-            if intent and intent.confidence >= 0.8:
-                logger.info(f"Intención directa detectada: {intent}")
-                result = self._execute_intent(intent)
-                if result:
-                    response = self._build_smart_response([result])
-                    self.memory.save_message("assistant", response)
-                    return response
-
-        # Paso 2: Usar el LLM para entender la petición
-        # Detectar si el usuario EXPLÍCITAMENTE pide leer/ver la pantalla
-        # Solo cuando el usuario hace una pregunta directa sobre lo que hay
-        # en pantalla. NO activar por menciones casuales de "pantalla".
-        needs_screen = bool(re.search(
-            r"(?:qu[eé]|que)\s+(?:hay|pone|dice|se\s+ve|aparece)\s+(?:en\s+)?(?:la\s+)?(?:pantalla|la\s+pantalla)"
-            r"|(?:lee|leer|dime)\s+(?:lo\s+que|qu[eé]|que)\s+(?:hay|pone|dice|se\s+ve)\s+(?:en\s+)?(?:la\s+)?pantalla"
-            r"|(?:describe|describir)\s+(?:lo\s+que|la)\s+(?:pantalla|se\s+ve\s+en\s+pantalla)"
-            r"|(?:lee|leer)\s+(?:la\s+)?pantalla"
-            r"|(?:qu[eé]|que)\s+(?:hay|pone|dice)\s+(?:aqu[ií]|ah[ií])",
-            user_input, re.IGNORECASE
-        ))
-
-        # Detectar si es una pregunta conversacional simple (no necesita contexto pesado)
-        is_simple_chat = bool(re.search(
-            r"^(?:cu[eé]ntame|dime|sabes|conoces|qu[eé]\s+(?:es|son|significa|opinas)|"
-            r"c[oó]mo\s+(?:est[aá]s|funciona|se\s+hace)|"
-            r"por\s+qu[eé]|qui[eé]n|cu[aá]ndo|cu[aá]nto|d[oó]nde|"
-            r"haz(?:me)?\s+(?:un|una)\s+(?:chiste|broma|historia|resumen)|"
-            r"explica|define|traduce|escribe|recomienda|sugiere|"
-            r"cu[aá]l\s+es|hab[ií]a\s+una\s+vez|hab[ií]a|"
-            r"hola|hey|oye|mira|a\s+ver)",
-            user_input, re.IGNORECASE
-        ))
-
-        # Para chat simple, contexto mínimo. Para pantalla, incluir OCR.
-        if is_simple_chat and not needs_screen:
+        # ── ¿Conversación pura? (preguntas, charla, sin acciones) ──
+        if self._is_chat_only(user_input):
+            logger.info("Conversación pura, usando LLM.")
             context = self._build_context_minimal()
-        else:
-            context = self._build_context(include_screen=needs_screen)
+            llm_response = self.brain.chat(user_input, context=context)
+            clean_response = self.brain.clean_response(llm_response)
+            self.memory.save_message("assistant", clean_response)
+            return clean_response
 
-        llm_response = self.brain.chat(user_input, context=context)
+        # ══════════════════════════════════════════════════════
+        #  TODO LO DEMÁS → Agente autónomo
+        #  El agente LEE la pantalla, hace un PLAN y lo EJECUTA.
+        #  Esta es la ruta para: "entra en drive", "descarga el pdf",
+        #  "haz click en X", "busca las tareas", etc.
+        # ══════════════════════════════════════════════════════
+        logger.info(f"Delegando al agente autónomo: '{user_input[:80]}'")
+        self._last_goal = user_input
+        # Pasar las últimas líneas del chat para que el agente tenga contexto
+        recent = self.memory.get_recent_messages(limit=6)
+        chat_ctx = "\n".join(
+            f"{m['role']}: {m['content'][:120]}" for m in recent
+        )
+        agent_result = self.agent.execute_goal(
+            goal=user_input, context=chat_ctx
+        )
+        self.memory.save_message("assistant", agent_result)
+        return agent_result
 
-        # Paso 3: Extraer y ejecutar acciones del LLM
-        llm_intents = self.parser.parse_llm_actions(llm_response)
-        action_results = []
-        for llm_intent in llm_intents:
-            result = self._execute_intent(llm_intent)
-            if result:
-                action_results.append(result)
+    # ─── Comandos rápidos por regex ─────────────────────────
 
-        # Paso 3b: Safety net — detectar si el LLM afirmó haber hecho algo
-        # sin generar ACTION tags (alucinación de acción)
-        if not llm_intents:
-            fallback_result = self._detect_and_fix_hallucinated_action(
-                user_input, llm_response
-            )
-            if fallback_result:
-                action_results.append(fallback_result)
+    # Apps que se pueden abrir DIRECTAMENTE (sin leer pantalla)
+    _KNOWN_APPS = {
+        "chrome", "firefox", "edge", "brave", "opera",
+        "explorer", "explorador", "word", "excel", "powerpoint",
+        "notepad", "bloc de notas", "calculadora", "calculator",
+        "spotify", "discord", "steam", "telegram", "whatsapp",
+        "teams", "zoom", "slack", "obs", "vlc", "paint",
+        "terminal", "powershell", "cmd", "vscode", "code",
+        "visual studio", "blender", "gimp", "audacity",
+        "outlook", "correo", "gmail", "mail", "google",
+    }
 
-        # Paso 4: Limpiar y devolver respuesta
-        clean_response = self.brain.clean_response(llm_response)
+    def _try_fast_command(self, text: str) -> Optional[str]:
+        """
+        Ejecuta comandos que NO necesitan ver la pantalla ni llamar al LLM.
+        Solo: abrir app conocida, volumen, brillo, screenshot, búsqueda web.
+        Devuelve None si no puede resolverlo aquí.
+        """
+        text_lower = text.lower().strip()
 
-        # Si hubo acciones ejecutadas, evaluar resultados honestamente
-        if action_results:
-            clean_response = self._build_smart_response(action_results)
+        # ── "abre chrome", "abre spotify", etc. ──
+        m = re.match(
+            r"(?:abre|abrir|open|ejecuta|lanza|inicia)\s+"
+            r"(?:la\s+app\s+(?:de\s+)?|la\s+aplicaci[oó]n\s+(?:de\s+)?|el\s+)?"
+            r"(.+?)\.?\s*$",
+            text_lower,
+        )
+        if m:
+            app = m.group(1).strip()
+            if any(k in app for k in self._KNOWN_APPS):
+                sc = self.modules.get("system_control")
+                if sc:
+                    result = sc.open_application(app)
+                    return f"Hecho, señor. {result}" if result else None
 
-        # Paso 5: Detectar si JARVIS no supo hacer algo → investigar y aprender
-        if self._should_learn(user_input, clean_response, llm_intents, action_results):
-            logger.info("Detectado que no sé hacer esto. Investigando...")
-            learn_result = self.learner.research_and_learn(
-                user_input, failure_context=clean_response
-            )
-            if learn_result and not learn_result.startswith("Error"):
-                clean_response = learn_result
-            else:
-                # Escalada: preguntar a ChatGPT si el LLM propio no pudo
-                logger.info("LLM propio no pudo resolver. Escalando a ChatGPT...")
-                chatgpt_result = self.learner.ask_chatgpt_for_help(
-                    user_input, failure_context=clean_response
-                )
-                if chatgpt_result and not chatgpt_result.startswith("Error"):
-                    clean_response = chatgpt_result
+        # ── "cierra chrome", etc. ──
+        m = re.match(
+            r"(?:cierra|cerrar|close)\s+(.+?)\.?\s*$",
+            text_lower,
+        )
+        if m:
+            app = m.group(1).strip()
+            if any(k in app for k in self._KNOWN_APPS):
+                sc = self.modules.get("system_control")
+                if sc:
+                    result = sc.close_application(app)
+                    return f"Hecho, señor. {result}" if result else None
 
-        self.memory.save_message("assistant", clean_response)
-        return clean_response
+        # ── Volumen ──
+        if re.search(r"sube.*volumen|volumen.*(?:m[aá]s|arriba|sube)", text_lower):
+            sc = self.modules.get("system_control")
+            if sc:
+                return f"Hecho, señor. {sc.volume_up()}"
+        if re.search(r"baja.*volumen|volumen.*(?:menos|abajo|baja)", text_lower):
+            sc = self.modules.get("system_control")
+            if sc:
+                return f"Hecho, señor. {sc.volume_down()}"
+        m = re.search(r"volumen\s+(?:al?\s+)?(\d+)", text_lower)
+        if m:
+            sc = self.modules.get("system_control")
+            if sc:
+                return f"Hecho, señor. {sc.set_volume(int(m.group(1)))}"
+        if re.search(r"(?:mute|silencia|mut[ea])", text_lower):
+            sc = self.modules.get("system_control")
+            if sc:
+                return f"Hecho, señor. {sc.toggle_mute()}"
+
+        # ── Screenshot ──
+        if re.search(r"captura|screenshot|pantallazo", text_lower):
+            sc = self.modules.get("system_control")
+            if sc:
+                return f"Hecho, señor. {sc.take_screenshot()}"
+
+        # ── Brillo ──
+        if re.search(r"sube.*brillo|brillo.*(?:m[aá]s|arriba)", text_lower):
+            sc = self.modules.get("system_control")
+            if sc:
+                return f"Hecho, señor. {sc.brightness_up()}"
+        if re.search(r"baja.*brillo|brillo.*(?:menos|abajo)", text_lower):
+            sc = self.modules.get("system_control")
+            if sc:
+                return f"Hecho, señor. {sc.brightness_down()}"
+
+        # ── Búsqueda web explícita: "busca en google X" ──
+        m = re.match(
+            r"(?:busca|buscar|search)\s+(?:en\s+(?:google|internet|la\s+web)\s+)"
+            r"(.+?)\.?\s*$",
+            text_lower,
+        )
+        if m:
+            ws = self.modules.get("web_search")
+            if ws:
+                return ws.search(m.group(1).strip())
+
+        # ── Apagar / reiniciar / bloquear ──
+        if re.search(r"bloquea.*pantalla|lock\s+screen", text_lower):
+            sc = self.modules.get("system_control")
+            if sc:
+                return f"Hecho, señor. {sc.lock_screen()}"
+        if re.search(r"apaga.*(?:ordenador|pc|equipo)|shutdown", text_lower):
+            sc = self.modules.get("system_control")
+            if sc:
+                return f"Hecho, señor. {sc.shutdown()}"
+        if re.search(r"reinicia.*(?:ordenador|pc|equipo)|restart", text_lower):
+            sc = self.modules.get("system_control")
+            if sc:
+                return f"Hecho, señor. {sc.restart()}"
+
+        return None
+
+    def _is_chat_only(self, text: str) -> bool:
+        """
+        Detecta si es una pregunta/conversación pura que NO requiere
+        interactuar con el ordenador (no necesita agente).
+        """
+        text_lower = text.lower().strip()
+
+        # Si menciona la pantalla → NO es chat, necesita agente
+        if re.search(
+            r"pantalla|lo\s+que\s+(?:hay|se\s+ve|pone|dice)|"
+            r"lo\s+que\s+(?:tengo|veo)\s+(?:en|aqu[ií])",
+            text_lower,
+        ):
+            return False
+
+        # Preguntas conversacionales (no requieren acciones mecánicas)
+        if re.match(
+            r"(?:qu[eé]\s+(?:es|son|significa|opinas\s+(?:de|sobre))|"
+            r"c[oó]mo\s+(?:est[aá]s|funciona|se\s+(?:hace|dice|llama))|"
+            r"por\s*qu[eé]|qui[eé]n\s+(?:es|fue|era)|"
+            r"cu[aá]ndo\s+(?:fue|es|ser[aá])|"
+            r"d[oó]nde\s+(?:est[aá]|queda)|"
+            r"cu[eé]ntame|expl[ií]came|def[ií]neme|"
+            r"trad[uú]ce(?:me)?|recomienda|sugiere|"
+            r"haz(?:me)?\s+(?:un|una)\s+(?:chiste|broma|historia|resumen|poema))",
+            text_lower,
+        ):
+            return True
+
+        # "dime qué es X", "sabes qué es X", etc.
+        if re.match(
+            r"(?:dime|sabes|conoces)\s+(?:qu[eé]|c[oó]mo|por\s*qu[eé]|qui[eé]n)",
+            text_lower,
+        ):
+            return True
+
+        # Frases muy cortas sin verbos de acción → probablemente chat
+        # Ej: "qué opinas", "gracias", "vale" (ya gestionados por greeting/local)
+
+        return False
 
     # ─── Evaluación inteligente de resultados ────────────────
 
@@ -341,6 +414,341 @@ class Orchestrator:
                 f"Parcialmente completado: {' | '.join(successes)}. "
                 f"Fallaron: {' | '.join(failures)}"
             )
+
+    # ─── Detección de cambio de tema ─────────────────────────
+
+    _TOPIC_CHANGE_PHRASES = [
+        r"no me refiero", r"no es eso", r"eso no es",
+        r"ahora (?:estamos )?hablando de otra cosa",
+        r"ahora (?:quiero|necesito|vamos a)", r"cambia(?:mos)? de tema",
+        r"dejemos eso", r"olvida(?:te de)? eso", r"no,?\s*ahora",
+        r"otra cosa", r"olv[ií]da(?:lo|te)", r"para\s+con\s+eso",
+        r"d[eé]jalo", r"no(?:,| )(?:eso )?no",
+    ]
+
+    def _is_topic_change(self, text: str) -> bool:
+        """Detecta si el usuario rechaza la tarea actual y quiere hacer otra cosa."""
+        text_lower = text.lower()
+        return any(re.search(p, text_lower) for p in self._TOPIC_CHANGE_PHRASES)
+
+    def _extract_new_request(self, text: str) -> str:
+        """
+        Extrae la nueva petición del usuario de un texto con rechazo + nueva orden.
+        Ej: 'no me refiero a eso. En el tab de google tienes ejercicios...' → nueva parte
+        """
+        # Intentar separar por frases de corte
+        for separator in [
+            r"[.,]\s*(?:ahora|en el|quiero|necesito|entra|abre|mira|revisa|busca|ve a)",
+            r"[.,]\s+",
+        ]:
+            parts = re.split(separator, text, maxsplit=1, flags=re.IGNORECASE)
+            if len(parts) > 1:
+                # La segunda parte es la nueva petición
+                new_part = parts[1].strip()
+                # Re-añadir la palabra que inicia la acción si fue capturada en el split
+                match = re.search(separator, text, re.IGNORECASE)
+                if match:
+                    captured = match.group(0).lstrip(' .,')
+                    if captured and not new_part.lower().startswith(captured.lower()):
+                        new_part = captured + " " + new_part
+                if len(new_part) > 10:
+                    return new_part
+        return ""
+
+    # ─── Detección de respuestas fallidas ─────────────────────
+
+    _FAILURE_PHRASES = [
+        "no he podido", "me temo", "no puedo procesar",
+        "inténtelo de nuevo", "error:", "error ejecutando",
+        "rate limit", "límite de peticiones", "no disponible",
+        "no pude obtener", "sin acceso al llm",
+        "los comandos directos", "espere un minuto",
+    ]
+
+    def _is_failure_response(self, text: str) -> bool:
+        """Detecta si una respuesta es un mensaje de error/fallo."""
+        if not text:
+            return True
+        text_lower = text.lower()
+        if text_lower.startswith("error"):
+            return True
+        return any(phrase in text_lower for phrase in self._FAILURE_PHRASES)
+
+    # ─── Detección de texto explicativo ──────────────────────
+
+    def _is_explanatory_text(self, text: str) -> bool:
+        """
+        Detecta si el usuario está EXPLICANDO o ENSEÑANDO algo, no dando
+        un comando directo.
+
+        Ejemplos de texto explicativo:
+        - "para ver las tareas deberías bajar abajo del todo"
+        - "cuando quieras entregar un trabajo tienes que..."
+        - "lo que tienes que hacer es ir a cronología"
+        - "te explico: primero vas a aules y luego..."
+        - "deberías buscar en el apartado de cronología"
+        - "si quieres ver las tareas pendientes, baja hasta abajo"
+
+        Ejemplos que NO son explicativos (son comandos):
+        - "abre google"
+        - "busca mis tareas"
+        - "baja el volumen"
+        - "entra en aules"
+        """
+        text_lower = text.lower().strip()
+
+        # EXCEPCIÓN: si el texto empieza con un verbo de comando directo
+        # ("mira X", "busca X", "dime X", "revisa X", "entra en X"),
+        # es un COMANDO, no una explicación, aunque contenga "que/hay que".
+        # Ej: "mira qué hay que hacer en la tarea" = COMANDO
+        #     "mira que para entrar tienes que..." = EXPLICACIÓN
+        if re.match(
+            r"^(?:mira|busca|dime|revisa|entra|abre|ve\b|haz|pon|"
+            r"comprueba|consulta|muestra|enseña|encuentra)\s",
+            text_lower
+        ):
+            return False
+
+        # Patrones que indican explicación / enseñanza / instrucciones
+        explanatory_patterns = [
+            # "para ver/hacer X deberías/tienes que/hay que..."
+            r"^para\s+(?:ver|hacer|buscar|encontrar|entregar|acceder|llegar|poder)",
+            # "deberías / tendrías que"
+            r"(?:deber[ií]as|tendr[ií]as\s+que)",
+            # "lo que tienes/hay que hacer es" (ENSEÑANDO, ej: "lo que hay que hacer es ir a...")
+            r"^lo\s+que\s+(?:tienes|hay)\s+que\s+hacer\s+es",
+            # "te explico / te cuento / déjame explicar"
+            r"(?:te\s+(?:explico|cuento|digo)|d[eé]jame\s+explicar)",
+            # "cuando quieras / si quieres"
+            r"^(?:cuando|si)\s+(?:quieras|quieres|necesites|vayas)",
+            # "la forma de / la manera de / el truco es"
+            r"(?:la\s+(?:forma|manera)\s+de|el\s+truco\s+(?:es|está))",
+            # "primero tienes que / primero hay que / primero vas a"
+            r"primero\s+(?:tienes|hay|vas|debes|necesitas)",
+            # "en la página de X bajar/buscar/ir a" (instrucción indirecta)
+            r"en\s+la\s+p[aá]gina\s+de\s+.+?(?:bajar|buscar|ir\s+a|subir|entrar)",
+            # "el apartado / la sección / la pestaña de X es donde"
+            r"(?:el\s+apartado|la\s+secci[oó]n|la\s+pestaña)\s+.+?(?:es\s+donde|tiene|contiene|muestra)",
+            # "ahí / allí es donde / ahí te salen"
+            r"(?:ah[ií]|all[ií])\s+(?:es\s+donde|te\s+(?:sale|salen|aparece))",
+            # "lo que pasa es que / el problema es que"
+            r"lo\s+que\s+(?:pasa|ocurre)\s+es\s+que",
+            # "te recomiendo / te sugiero"
+            r"te\s+(?:recomiendo|sugiero|aconsejo)",
+            # "eso se hace / eso está en"
+            r"eso\s+(?:se\s+hace|est[aá])\s+(?:en|con|desde)",
+            # "fíjate que / ten en cuenta que" (NOT "mira que" — handled above)
+            r"(?:f[ií]jate|ten\s+en\s+cuenta)\s+que",
+            # "tienes que ir/hacer/buscar" (solo si NO empieza con verbo comando)
+            r"^(?:tienes|hay)\s+que\s+(?:ir|hacer|buscar|entrar|bajar|subir)",
+        ]
+
+        for pattern in explanatory_patterns:
+            if re.search(pattern, text_lower):
+                logger.debug(f"Texto explicativo detectado por patrón: {pattern}")
+                return True
+
+        # Heurística adicional: si el texto es largo (>100 chars) y contiene
+        # "donde", "porque", "ya que", "es decir" → probablemente explicación
+        if len(text) > 100 and re.search(
+            r"\b(?:donde|porque|ya\s+que|es\s+decir|o\s+sea|por\s+ejemplo|"
+            r"resulta\s+que|en\s+realidad|b[aá]sicamente)\b",
+            text_lower
+        ):
+            return True
+
+        return False
+
+    def _respond_to_explanation(self, text: str) -> str:
+        """Genera respuesta local para texto explicativo/enseñanza sin usar LLM."""
+        text_lower = text.lower()
+
+        # Si el usuario está enseñando algo sobre navegación / cómo usar sitios
+        if re.search(r"(?:aules|classroom|moodle|web|p[aá]gina|sitio|portal)", text_lower):
+            return ("Entendido, señor. Tomo nota de esas instrucciones "
+                    "sobre la navegación. Lo tendré en cuenta para futuras tareas.")
+
+        # Si está explicando un proceso / tutorial
+        if re.search(r"(?:primero|luego|después|paso|tienes\s+que|hay\s+que|deber[ií]a)", text_lower):
+            return ("Entendido, señor. He registrado ese procedimiento. "
+                    "Cuando necesite ejecutarlo, lo haré siguiendo sus indicaciones.")
+
+        # Genérico
+        return "Entendido, señor. Lo tendré en cuenta."
+
+    def _try_local_answer(self, text: str) -> Optional[str]:
+        """
+        Intenta responder preguntas comunes sin usar el LLM.
+        Devuelve None si no puede responder localmente.
+        """
+        text_lower = text.lower().strip().rstrip("?").strip()
+
+        # ─── Hora y fecha (resolución instantánea) ─────────
+        if re.search(r"(?:qu[eé]|que)\s+hora\s+(?:es|son)", text_lower):
+            import datetime
+            now = datetime.datetime.now()
+            return f"Son las {now.strftime('%H:%M')}, señor."
+
+        if re.search(r"(?:qu[eé]|que)\s+(?:d[ií]a|fecha)\s+(?:es|son|estamos)", text_lower):
+            import datetime
+            now = datetime.datetime.now()
+            days = ["lunes", "martes", "miércoles", "jueves",
+                    "viernes", "sábado", "domingo"]
+            months = [
+                "enero", "febrero", "marzo", "abril", "mayo", "junio",
+                "julio", "agosto", "septiembre", "octubre",
+                "noviembre", "diciembre",
+            ]
+            return (f"Hoy es {days[now.weekday()]} {now.day} de "
+                    f"{months[now.month - 1]} de {now.year}, señor.")
+
+        # ─── Estado del sistema (CPU/RAM/disco) ────────────
+        if re.search(
+            r"(?:c[oó]mo\s+(?:va|est[aá])\s+(?:el\s+)?(?:sistema|pc|ordenador|equipo)"
+            r"|estado\s+(?:del?\s+)?(?:sistema|pc|ordenador)"
+            r"|(?:cpu|ram|memoria|disco|bater[ií]a)\s*\??)",
+            text_lower
+        ):
+            sc = self.modules.get("system_control")
+            if sc:
+                try:
+                    return sc.system_info()
+                except Exception:
+                    pass
+
+        # ─── Cálculos simples ──────────────────────────────
+        m_calc = re.search(
+            r"(?:cu[aá]nto\s+(?:es|son|da|resulta)|calcula|resultado\s+de)\s+"
+            r"(\d[\d\s\+\-\*\/\.\,\(\)x×÷]+\d)",
+            text_lower
+        )
+        if m_calc:
+            try:
+                expr = m_calc.group(1).replace("x", "*").replace("×", "*").replace("÷", "/").replace(",", ".")
+                result = eval(expr)  # noqa: S307
+                return f"El resultado es {result}, señor."
+            except Exception:
+                pass
+
+        # Preguntas sobre JARVIS / estado / funcionalidad
+        jarvis_questions = {
+            # Rate limit (ya no es un problema con gpt-4o-mini)
+            r"(?:qu[eé]|que)\s+(?:es\s+(?:el|ese)|significa)\s+l[ií]mite\s+de\s+peticiones":
+                ("El API de GitHub Models tiene un límite generoso de 20.000 peticiones diarias "
+                 "con gpt-4o-mini, señor. En la práctica, no debería ser un problema."),
+            r"(?:qu[eé]|que)\s+l[ií]mite\s+de\s+peticiones":
+                ("Usamos gpt-4o-mini con 20.000 peticiones diarias, señor. "
+                 "Es más que suficiente para uso normal."),
+            r"por\s*qu[eé]\s+(?:no\s+)?(?:funciona|respondes|puedes|sale)":
+                ("Puede que haya un problema de conexión, señor. "
+                 "Los comandos directos funcionan siempre sin internet. "
+                 "Para preguntas que requieren IA, necesito conexión a GitHub Models."),
+            # Funcionalidades
+            r"(?:qu[eé]|que)\s+(?:puedes|sabes)\s+hacer":
+                ("Puedo abrir aplicaciones, navegar por webs, buscar en páginas, "
+                 "controlar volumen/brillo, hacer capturas de pantalla, gestionar archivos, "
+                 "buscar en internet, leer la pantalla por OCR, y responder preguntas "
+                 "usando inteligencia artificial, señor."),
+            r"(?:c[oó]mo|como)\s+(?:est[aá]s|estas|te\s+(?:va|encuentras))":
+                "Operativo al 100%, señor. ¿En qué puedo ayudarle?",
+            r"(?:qui[eé]n|quien)\s+(?:eres|te\s+hizo|te\s+cre[oó])":
+                ("Soy J.A.R.V.I.S., Just A Rather Very Intelligent System. "
+                 "Un asistente de escritorio creado para ayudarle, señor."),
+            r"(?:qu[eé]|que)\s+(?:hora|fecha|d[ií]a)\s+(?:es|son)":
+                None,  # Ya gestionado arriba
+            # Saludos conversacionales rápidos
+            r"^(?:gracias|thank|merci)\s*$":
+                "De nada, señor. Para servirle.",
+            r"^(?:bien|genial|perfecto|vale|ok|oki|okey)\s*$":
+                "Entendido, señor. ¿Necesita algo más?",
+        }
+
+        for pattern, answer in jarvis_questions.items():
+            if re.search(pattern, text_lower):
+                if answer is None:
+                    return None  # Dejar que otro handler lo procese
+                return answer
+
+        return None
+
+    # ─── Detección de objetivo informacional ──────────────────
+
+    def _extract_informational_goal(self, text: str) -> Optional[str]:
+        """
+        Detecta si el texto del usuario contiene un OBJETIVO INFORMACIONAL,
+        es decir, algo que requiere leer la pantalla y reportar resultados.
+
+        Ejemplos con objetivo:
+        - "abre google, entra en aules y MIRA mis tareas pendientes"
+          → goal: "mirar tareas pendientes en aules"
+        - "entra en aules y BUSCA las áreas por entregar"
+          → goal: "buscar las áreas por entregar"
+        - "ve a classroom y DIME qué tareas tengo"
+          → goal: "decir qué tareas tiene"
+        - "abre chrome y mira mi horario en aules"
+          → goal: "mirar horario en aules"
+
+        Ejemplos SIN objetivo (solo navegación):
+        - "abre google y entra en aules"  → (solo navegar, no buscar info)
+        - "abre spotify"  → (solo abrir)
+
+        Returns:
+            El objetivo como string, o None si no hay objetivo informacional.
+        """
+        text_lower = text.lower()
+
+        # Patrones que indican "quiero INFO de vuelta"
+        info_patterns = [
+            # "mira/busca/dime/muestra las tareas/notas/horario/etc"
+            (r"(?:mira|mirar|busca|buscar|dime|decirme|muéstra|mostrar|"
+             r"enseña|enseñar|encuentra|encontrar|comprueba|comprobar|"
+             r"revisa|revisar|consulta|consultar)\s+"
+             r"(?:mis?\s+|las?\s+|los?\s+|el\s+|la\s+|lo\s+de\s+)?"
+             r"(.{5,80})"),
+            # "qué tareas/notas/X tengo/hay/quedan"
+            (r"(?:qu[eé]|cuáles?|cuántas?)\s+(?:tareas?|notas?|trabajos?|"
+             r"entregas?|actividades?|asignaturas?|áreas?|materias?|"
+             r"deberes?|pendientes?|eventos?|fechas?)\s+"
+             r"(.{0,60})"),
+            # "tareas/actividades por entregar/pendientes"
+            (r"(?:tareas?|actividades?|trabajos?|entregas?|áreas?)\s+"
+             r"(?:por\s+entregar|pendientes?|que\s+(?:me\s+)?(?:quedan?|faltan?|tengo))"),
+        ]
+
+        for pattern in info_patterns:
+            m = re.search(pattern, text_lower)
+            if m:
+                # Devolver el texto COMPLETO del usuario como objetivo,
+                # no solo la parte matcheada.  El LLM del agente autónomo
+                # necesita todo el contexto (ej: "entra en la tarea
+                # 'Actividad tema 6' y mira que hay que hacer" — si solo
+                # devolvemos "mira que hay que hacer" se pierde el target).
+                return text.strip()
+
+        # Patrón más general: si tiene navegación + verbo informacional
+        has_nav = bool(re.search(
+            r"\b(?:entra|navega|ve\s+a|abre)\b.*\b(?:en|a)\b",
+            text_lower
+        ))
+        has_info_verb = bool(re.search(
+            r"\b(?:mira|busca|dime|muestra|enseña|comprueba|revisa|consulta|lee)\b",
+            text_lower
+        ))
+        if has_nav and has_info_verb:
+            return text.strip()
+
+        return None
+
+    def _extract_known_site(self, text: str) -> Optional[str]:
+        """
+        Extrae un sitio web conocido mencionado en el texto.
+        Ej: "mira las tareas en aules" → "aules"
+        """
+        text_lower = text.lower()
+        for site_name in self.parser._KNOWN_SITES:
+            if site_name in text_lower:
+                return site_name
+        return None
 
     # ─── Detección de workflows complejos ─────────────────────
 
@@ -497,6 +905,7 @@ class Orchestrator:
         - El LLM respondió que no puede hacerlo
         - No se ejecutó ninguna acción, o todas fallaron
         - El usuario parece querer una acción (no solo conversar)
+        - NO es algo que JARVIS ya puede hacer con sus módulos existentes
         """
         # Si se ejecutaron acciones y al menos una tuvo éxito, no aprender
         if action_results:
@@ -505,6 +914,27 @@ class Orchestrator:
                 for r in action_results
             )
             if not all_failed:
+                return False
+
+        # NO aprender si el comando es algo que JARVIS ya sabe hacer
+        # (OCR, click, navegar, buscar, abrir apps, etc.)
+        # Estos fallos son operacionales, no de conocimiento
+        existing_capabilities = [
+            r"\b(?:lee|leer|mira|mirar)\b.*\b(?:pantalla|p[aá]gina|web|texto)\b",
+            r"\b(?:haz\s+clic|click|pulsa|clica)\b",
+            r"\b(?:abre|abrir)\b.*\b(?:chrome|firefox|navegador|google|youtube)\b",
+            r"\b(?:busca|buscar)\b.*\b(?:en\s+google|en\s+la\s+web|en\s+internet)\b",
+            r"\b(?:escribe|escribir|teclea)\b",
+            r"\b(?:navega|navegar|entra|entrar|ve\s+a|ir\s+a)\b",
+            r"\b(?:sube|subir|upload)\b.*\b(?:archivo|fichero|file)\b",
+            r"\b(?:pestaña|tab)\b.*\b(?:google|chrome|abiert)\b",
+        ]
+        user_lower = user_input.lower()
+        for pattern in existing_capabilities:
+            if re.search(pattern, user_lower):
+                logger.info(
+                    f"_should_learn: NO — el comando usa capacidades existentes de JARVIS"
+                )
                 return False
 
         # Si hubo intenciones del LLM sin resultados, no aprender aún
@@ -965,11 +1395,25 @@ class Orchestrator:
 
     def list_learned_skills(self) -> str:
         """Lista todas las habilidades que JARVIS ha aprendido."""
-        return self.learner.list_skills()
+        skills = self.learner.list_skills()
+        procedures = self.agent.list_procedures()
+        parts = []
+        if skills and not skills.startswith("No"):
+            parts.append(skills)
+        if procedures and not procedures.startswith("No"):
+            parts.append(procedures)
+        if not parts:
+            return "No he aprendido nada todavía, señor."
+        return "\n\n".join(parts)
 
     def forget_skill(self, skill_name: str) -> str:
-        """Elimina una habilidad aprendida."""
-        return self.learner.forget_skill(skill_name)
+        """Elimina una habilidad o procedimiento aprendido."""
+        # Intentar en learner primero
+        result = self.learner.forget_skill(skill_name)
+        if "No encontré" in result:
+            # Intentar en procedimientos
+            result = self.agent.forget_procedure(skill_name)
+        return result
 
     def format_in_app(self, app_name: str, format_instruction: str) -> str:
         """
@@ -1379,7 +1823,7 @@ class Orchestrator:
         return self.brain.set_mode(mode)
 
     def switch_cloud_provider(self, provider: str) -> str:
-        """Cambia el proveedor cloud (groq o gemini)."""
+        """Cambia el proveedor cloud (github o gemini)."""
         return self.brain.set_cloud_provider(provider)
 
     def get_brain_mode_info(self) -> str:
@@ -1391,12 +1835,12 @@ class Orchestrator:
         provider = provider.lower().strip()
         api_key = api_key.strip()
 
-        if provider not in ("groq", "gemini"):
-            return f"Proveedor '{provider}' no soportado. Use 'groq' o 'gemini'."
+        if provider not in ("github", "gemini"):
+            return f"Proveedor '{provider}' no soportado. Use 'github' o 'gemini'."
 
         # Guardar en brain
-        if provider == "groq":
-            self.brain.groq_api_key = api_key
+        if provider == "github":
+            self.brain.github_token = api_key
         else:
             self.brain.gemini_api_key = api_key
 
@@ -1404,7 +1848,8 @@ class Orchestrator:
         try:
             from config import load_config, save_config
             cfg = load_config()
-            cfg[f"{provider}_api_key"] = api_key
+            config_key = "github_token" if provider == "github" else f"{provider}_api_key"
+            cfg[config_key] = api_key
             save_config(cfg)
         except Exception as e:
             logger.warning(f"No se pudo guardar API key: {e}")

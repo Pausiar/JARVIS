@@ -98,13 +98,40 @@ class SystemControl:
 
     def open_application(self, app_name: str) -> str:
         """
-        Abre una aplicación usando la búsqueda de Windows.
-        Simula: pulsar tecla Win → escribir nombre → Enter.
-        Como lo haría el usuario con sus propias manos.
+        Abre una aplicación.
+        1. Intenta lanzamiento directo (Start-Process, URLs de protocolo)
+        2. Fallback: búsqueda de Windows (Win → escribir → Enter)
         """
         import pyautogui
 
         app_lower = app_name.lower().strip()
+
+        # ─── Mapa de lanzamiento directo (más fiable que Windows Search) ───
+        _direct_launch = {
+            "chrome": "chrome", "google": "chrome", "google chrome": "chrome",
+            "firefox": "firefox", "edge": "msedge", "microsoft edge": "msedge",
+            "notepad": "notepad", "bloc de notas": "notepad",
+            "calculadora": "calc", "calculator": "calc",
+            "explorador": "explorer", "explorer": "explorer",
+            "cmd": "cmd", "terminal": "wt", "powershell": "powershell",
+            "paint": "mspaint",
+            "word": "winword", "excel": "excel", "powerpoint": "powerpnt",
+            "outlook": "outlook",
+            "vscode": "code", "visual studio code": "code", "code": "code",
+        }
+
+        direct_cmd = _direct_launch.get(app_lower)
+        if direct_cmd:
+            try:
+                logger.info(f"Abriendo '{app_name}' con os.startfile: {direct_cmd}")
+                # os.startfile usa Windows Shell (App Paths registry) — fiable
+                os.startfile(direct_cmd)
+                time.sleep(2.0)
+                return f"Aplicación abierta: {app_name}"
+            except OSError as e:
+                logger.warning(f"os.startfile falló para '{direct_cmd}': {e}. Intentando Windows Search...")
+
+        # ─── Fallback: búsqueda de Windows ───
         search_term = self._app_search_names.get(app_lower, app_name)
 
         try:
@@ -115,12 +142,9 @@ class SystemControl:
             time.sleep(0.8)
 
             # 2. Escribir el nombre de la app
-            #    pyautogui.typewrite solo soporta ASCII, 
-            #    así que usamos el portapapeles para texto con acentos/unicode
             if search_term.isascii():
                 pyautogui.typewrite(search_term, interval=0.03)
             else:
-                # Para texto con acentos/unicode: copiar al portapapeles y pegar
                 self._safe_set_clipboard(search_term)
                 pyautogui.hotkey("ctrl", "v")
 
@@ -877,9 +901,10 @@ class SystemControl:
             [Windows.Graphics.Imaging.SoftwareBitmap, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
             [Windows.Graphics.Imaging.BitmapDecoder, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
             [Windows.Storage.StorageFile, Windows.Storage, ContentType=WindowsRuntime] | Out-Null
+            [Windows.Globalization.Language, Windows.Globalization, ContentType=WindowsRuntime] | Out-Null
 
             # Abrir imagen
-            $storagefile = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync("{temp_path.replace(chr(92), '/')}")) ([Windows.Storage.StorageFile])
+            $storagefile = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync("{temp_path}")) ([Windows.Storage.StorageFile])
             $stream = Await ($storagefile.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
             $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
             $bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
@@ -963,11 +988,12 @@ class SystemControl:
             '''
 
             result = subprocess.run(
-                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-                capture_output=True, text=True, timeout=20
+                ["powershell", "-ExecutionPolicy", "Bypass", "-Command",
+                 "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " + ps_script],
+                capture_output=True, timeout=20
             )
 
-            output = result.stdout.strip()
+            output = (result.stdout.decode('utf-8', errors='replace') if result.stdout else '').strip()
             logger.debug(f"OCR output: {output}")
 
             if "OCR_ENGINE_NULL" in output:
@@ -1058,13 +1084,13 @@ class SystemControl:
             [Windows.Graphics.Imaging.SoftwareBitmap, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
             [Windows.Graphics.Imaging.BitmapDecoder, Windows.Foundation, ContentType=WindowsRuntime] | Out-Null
             [Windows.Storage.StorageFile, Windows.Storage, ContentType=WindowsRuntime] | Out-Null
+            [Windows.Globalization.Language, Windows.Globalization, ContentType=WindowsRuntime] | Out-Null
 
-            $storagefile = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync("{temp_path.replace(chr(92), '/')}")) ([Windows.Storage.StorageFile])
+            $storagefile = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync("{temp_path}")) ([Windows.Storage.StorageFile])
             $stream = Await ($storagefile.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
             $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
             $bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
 
-            $lang = New-Object Windows.Globalization.Language("es-ES")
             $ocr = $null
             foreach ($langTag in @("ca-ES", "es-ES", "en-US")) {{
                 $tryLang = New-Object Windows.Globalization.Language($langTag)
@@ -1107,17 +1133,22 @@ class SystemControl:
             '''
 
             result = subprocess.run(
-                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-                capture_output=True, text=True, timeout=30
+                ["powershell", "-ExecutionPolicy", "Bypass", "-Command",
+                 "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " + ps_script],
+                capture_output=True, timeout=30
             )
 
+            # Decodificar con utf-8 y fallback a errores reemplazados
+            stdout_raw = result.stdout.decode('utf-8', errors='replace') if result.stdout else ""
+            stderr_raw = result.stderr.decode('utf-8', errors='replace') if result.stderr else ""
+
             # Log errores de PowerShell para debugging
-            if result.stderr and result.stderr.strip():
-                logger.warning(f"OCR PowerShell stderr: {result.stderr[:300]}")
+            if stderr_raw.strip():
+                logger.warning(f"OCR PowerShell stderr: {stderr_raw[:300]}")
             if result.returncode != 0:
                 logger.warning(f"OCR PowerShell exit code: {result.returncode}")
 
-            stdout_text = result.stdout.strip()
+            stdout_text = stdout_raw.strip()
             if "OCR_ENGINE_NULL" in stdout_text:
                 logger.error("OCR engine es null — no hay idiomas OCR instalados en Windows. "
                              "Instalar: Configuración > Hora e idioma > Idioma > "

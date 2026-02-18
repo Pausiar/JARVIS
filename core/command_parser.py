@@ -55,6 +55,38 @@ class CommandParser:
     Combina detección por patrones (rápido) con análisis LLM (complejo).
     """
 
+    # Sitios conocidos → URL directa.
+    # Cuando el usuario dice "entra en aules", navega directamente.
+    _KNOWN_SITES: dict[str, str] = {
+        "aules":      "https://aules.edu.gva.es/fp/my/",
+        "moodle":     "https://aules.edu.gva.es/fp/my/",
+        "classroom":  "https://classroom.google.com",
+        "google classroom": "https://classroom.google.com",
+        "github":     "https://github.com",
+        "youtube":    "https://youtube.com",
+        "gmail":      "https://mail.google.com",
+        "drive":      "https://drive.google.com",
+        "google drive": "https://drive.google.com",
+        "twitter":    "https://x.com",
+        "x":          "https://x.com",
+        "instagram":  "https://instagram.com",
+        "whatsapp":   "https://web.whatsapp.com",
+        "whatsapp web": "https://web.whatsapp.com",
+        "facebook":   "https://facebook.com",
+        "reddit":     "https://reddit.com",
+        "twitch":     "https://twitch.tv",
+        "linkedin":   "https://linkedin.com",
+        "wikipedia":  "https://es.wikipedia.org",
+        "chatgpt":    "https://chat.openai.com",
+        "google":     "https://google.com",
+        "bing":       "https://bing.com",
+        "outlook":    "https://outlook.live.com",
+        "teams":      "https://teams.microsoft.com",
+        "notion":     "https://notion.so",
+        "canva":      "https://canva.com",
+        "spotify":    "https://open.spotify.com",
+    }
+
     def __init__(self):
         self._patterns = self._build_patterns()
         logger.info("CommandParser inicializado.")
@@ -563,6 +595,41 @@ class CommandParser:
             ),
         ])
 
+        # ─── YouTube / Reproducir ────────────────────────────
+        # "pon X en youtube", "reproduce X en youtube"
+        patterns.extend([
+            (
+                re.compile(
+                    r"(?:pon|reproduce|reproducir|play|escucha|escuchar)\s+"
+                    r"(.+?)\s+(?:en|de|por)\s+youtube",
+                    re.IGNORECASE,
+                ),
+                "web_search", "play_youtube",
+                lambda m: {"query": m.group(1).strip()},
+            ),
+            # "pon youtube y busca X"
+            (
+                re.compile(
+                    r"(?:pon|abre|open)\s+youtube\s+y\s+"
+                    r"(?:busca|pon|reproduce|play)\s+(.+)",
+                    re.IGNORECASE,
+                ),
+                "web_search", "play_youtube",
+                lambda m: {"query": m.group(1).strip()},
+            ),
+            # "pon música/canción X", "reproduce música X"
+            (
+                re.compile(
+                    r"(?:pon|reproduce|reproducir|play)\s+"
+                    r"(?:la\s+)?(?:m[uú]sica|canci[oó]n|v[ií]deo|video)?\s*"
+                    r"(?:de\s+)?(.{3,})",
+                    re.IGNORECASE,
+                ),
+                "web_search", "play_youtube",
+                lambda m: {"query": m.group(1).strip()},
+            ),
+        ])
+
         # ─── Email ──────────────────────────────────────────
         patterns.extend([
             (
@@ -623,7 +690,7 @@ class CommandParser:
             ),
             (
                 re.compile(
-                    r"(?:haz\s+clic|clic|click|pulsa|pincha|presiona|press)\s+(?:en\s+)?(?:el\s+|la\s+|los\s+|las\s+)?(.+)",
+                    r"(?:haz\s+click?|click?|click|pulsa|pincha|presiona|press)\s+(?:(?:en|sobre|encima\s+de)\s+)?(?:el\s+|la\s+|los\s+|las\s+)?(.+)",
                     re.IGNORECASE,
                 ),
                 "system_control", "click_on_text",
@@ -728,7 +795,7 @@ class CommandParser:
             # ─── Describe and click (clic por descripción con LLM) ──
             (
                 re.compile(
-                    r"(?:haz\s+clic|clic|click|pulsa|pincha)\s+(?:en\s+)?"
+                    r"(?:haz\s+click?|click?|click|pulsa|pincha)\s+(?:(?:en|sobre)\s+)?"
                     r"(?:donde\s+(?:pone|dice|hay|est[aá]|esta)|lo\s+que\s+(?:dice|pone))\s+(.+)",
                     re.IGNORECASE,
                 ),
@@ -737,7 +804,7 @@ class CommandParser:
             ),
             (
                 re.compile(
-                    r"(?:haz\s+clic|clic|click|pulsa|pincha)\s+(?:en\s+)?"
+                    r"(?:haz\s+click?|click?|click|pulsa|pincha)\s+(?:(?:en|sobre)\s+)?"
                     r"(?:el\s+|la\s+|los\s+|las\s+)?(?:bot[oó]n|enlace|link|icono|opci[oó]n)\s+"
                     r"(?:de\s+|que\s+(?:dice|pone)\s+)?(.+)",
                     re.IGNORECASE,
@@ -848,7 +915,7 @@ class CommandParser:
             # ─── Primer link/resultado (ANTES de 'entra en' genérico) ──
             (
                 re.compile(
-                    r"(?:entra|entrar|enter|abre|abrir|open|haz\s+clic|clic|click|pulsa|pincha)\s+"
+                    r"(?:entra|entrar|enter|abre|abrir|open|haz\s+click?|click?|click|pulsa|pincha)\s+"
                     r"(?:en\s+)?(?:el\s+)?(?:primer|first|1(?:er|ro)?)\s+"
                     r"(?:link|enlace|resultado|result)(?:\s+(?:de\s+)?(?:google|bing|la\s+búsqueda|busqueda|la\s+página|pagina))?",
                     re.IGNORECASE,
@@ -869,6 +936,24 @@ class CommandParser:
                     "username": m.group(1).strip().strip("\"'"),
                     "channel": m.group(2).strip().strip("\"'"),
                 },
+            ),
+            # ─── Entra en [sitio conocido] → navegar a URL directa ──
+            (
+                re.compile(
+                    r"(?:entra|entrar|enter|accede|acceder|métete|metete|ve)\s+"
+                    r"(?:a|en|al|to)\s+"
+                    r"(" + "|".join(
+                        re.escape(k) for k in sorted(
+                            CommandParser._KNOWN_SITES.keys(),
+                            key=len, reverse=True,
+                        )
+                    ) + r")\b",
+                    re.IGNORECASE,
+                ),
+                "system_control", "navigate_to_url",
+                lambda m: {"url": CommandParser._KNOWN_SITES.get(
+                    m.group(1).strip().lower(), m.group(1).strip()
+                )},
             ),
             (
                 re.compile(
@@ -978,7 +1063,7 @@ class CommandParser:
             # Pausa YouTube / video
             (
                 re.compile(
-                    r"(?:pausa|pausar|pause|para|parar)\s+(?:el\s+)?(?:youtube|v[ií]deo|video)",
+                    r"(?:pausa|pausar|pause|parar)\s+(?:el\s+)?(?:youtube|v[ií]deo|video)",
                     re.IGNORECASE,
                 ),
                 "media_control", "youtube_play_pause", lambda m: {},
@@ -1002,7 +1087,15 @@ class CommandParser:
             ),
             (
                 re.compile(
-                    r"(?:pausa|pausar|pause|para|parar)\s+(?:la\s+)?(?:m[uú]sica|canci[oó]n|audio|media|reproducci[oó]n)?",
+                    r"(?:pausa|pausar|pause|parar)\s+(?:la\s+)?(?:m[uú]sica|canci[oó]n|audio|media|reproducci[oó]n)?",
+                    re.IGNORECASE,
+                ),
+                "media_control", "play_pause", lambda m: {},
+            ),
+            # "para la música" — solo cuando va seguido de artículo + sustantivo multimedia
+            (
+                re.compile(
+                    r"\bpara\s+(?:la\s+)?(?:m[uú]sica|canci[oó]n|audio|media|reproducci[oó]n)",
                     re.IGNORECASE,
                 ),
                 "media_control", "play_pause", lambda m: {},
@@ -1254,11 +1347,11 @@ class CommandParser:
                 "orchestrator", "switch_brain_mode",
                 lambda m: {"mode": "local"},
             ),
-            # "usa groq", "proveedor groq", "cambia a groq/gemini"
+            # "usa github", "proveedor github", "cambia a github/gemini"
             (
                 re.compile(
                     r"(?:usa(?:r)?|cambia\s+a|proveedor)\s+"
-                    r"(groq|gemini)",
+                    r"(github|gemini)",
                     re.IGNORECASE,
                 ),
                 "orchestrator", "switch_cloud_provider",
@@ -1273,12 +1366,12 @@ class CommandParser:
                 "orchestrator", "get_brain_mode_info",
                 lambda m: {},
             ),
-            # "configura api key groq/gemini XXXXX"
+            # "configura api key github/gemini XXXXX"
             (
                 re.compile(
                     r"(?:configura(?:r)?|establece(?:r)?|pon(?:er)?|set)\s+"
-                    r"(?:la\s+)?(?:api\s*key|clave|key)\s+"
-                    r"(?:de\s+)?(groq|gemini)\s+(.+)",
+                    r"(?:la\s+)?(?:api\s*key|clave|key|token)\s+"
+                    r"(?:de\s+)?(github|gemini)\s+(.+)",
                     re.IGNORECASE,
                 ),
                 "orchestrator", "set_cloud_api_key",
@@ -1363,7 +1456,7 @@ class CommandParser:
             r"|enfoca|enfocar|cambia|minimiza|maximiza"
             r"|copia|copiar|lee|leer|describe"
             r"|pega|pegar|paste|mete|meter|inserta|insertar"
-            r"|reproduce|reproducir|play|pausa|pausar|pause|para|parar"
+            r"|reproduce|reproducir|play|pausa|pausar|pause|parar"
             r"|siguiente|next|anterior|previous|prev|pasa|skip"
             r"|silencia|silenciar|mutea|mutear"
             r"|crea|crear|a[ñn]ade|a[ñn]adir|agenda|programa|programar"
@@ -1395,13 +1488,23 @@ class CommandParser:
 
         # Paso 3: detectar contexto global del input
         # Si el texto menciona "pestaña actual", "dentro de", "interfaz",
-        # "en la web", las acciones de buscar deben ser en-app, no web.
+        # "en la web", o "entra en [sitio]", las acciones de buscar deben
+        # ser en-app, no web.
         in_app_context = bool(re.search(
             r"(?:en\s+la\s+)?(?:pestaña|página|pagina|interfaz|ventana)"
             r"|dentro\s+de\s+(?:la\s+)?(?:interfaz|web|app|aplicación|pagina|página)"
             r"|(?:en\s+la\s+)?(?:web|app)\s+(?:del|de la|de)",
             text, re.IGNORECASE
         ))
+
+        # También activar contexto in-app si hay navegación a sitio conocido
+        # o si hay "entra en X" (implica que buscaremos dentro de X)
+        if not in_app_context:
+            in_app_context = bool(re.search(
+                r"(?:entra|entrar|accede|acceder|métete|navega|navegar|ve)\s+"
+                r"(?:a|en|al|to)\s+\S+",
+                text, re.IGNORECASE
+            ))
 
         # Paso 4: intentar detectar intención en cada fragmento
         for part in expanded_parts:

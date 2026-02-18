@@ -58,3 +58,15 @@ class WebSearch:
             return f"URL abierta en el navegador: {url}"
         except Exception as e:
             return f"Error al abrir URL: {e}"
+
+    def play_youtube(self, query: str, **_kwargs) -> str:
+        """Busca y reproduce un vídeo en YouTube."""
+        try:
+            encoded = urllib.parse.quote_plus(query)
+            url = f"https://www.youtube.com/results?search_query={encoded}"
+            webbrowser.open(url)
+            logger.info(f"YouTube abierto con búsqueda: {query}")
+            return f"He buscado '{query}' en YouTube, señor."
+        except Exception as e:
+            logger.error(f"Error al abrir YouTube: {e}")
+            return f"Error al buscar en YouTube: {e}"
