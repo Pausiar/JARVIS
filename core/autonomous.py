@@ -82,42 +82,106 @@ class AutonomousAgent:
                 return w[:-len(suffix)]
         return w
 
+    # Palabras demasiado genéricas que NO deben puntuar en matching
+    _GENERIC_KEYWORDS = {
+        "jarvis", "google", "chrome", "abre", "entra", "mira",
+        "busca", "quiero", "necesito", "haz", "ahora", "porfa",
+        "favor", "puedes", "dime", "señor", "cosas", "algo",
+        "eso", "esto", "aqui", "alla", "hacer", "cosa",
+        "web", "internet", "pagina", "página", "sitio",
+    }
+
     def find_procedure(self, goal: str) -> Optional[dict]:
-        """Busca un procedimiento guardado que coincida con el objetivo."""
+        """Busca un procedimiento guardado que coincida con el objetivo.
+
+        Usa matching por keywords específicas (ignora genéricas) y
+        requiere un porcentaje mínimo de keywords coincidentes para
+        evitar falsos positivos.
+        """
         goal_lower = goal.lower()
         goal_words = [w for w in re.findall(r'\w+', goal_lower) if len(w) > 2]
         goal_stems = {self._stem_es(w) for w in goal_words}
 
         best_match = None
         best_score = 0
+        best_ratio = 0.0
 
         for proc in self._procedures:
             score = 0.0
-            for kw in proc.get("keywords", []):
+            # Solo contar keywords específicas (no genéricas)
+            specific_kws = [
+                kw for kw in proc.get("keywords", [])
+                if kw.lower() not in self._GENERIC_KEYWORDS
+            ]
+            if not specific_kws:
+                continue  # Procedimiento sin keywords útiles, saltar
+
+            matched = 0
+            for kw in specific_kws:
                 kw_lower = kw.lower()
                 if kw_lower in goal_lower:
                     score += 1.0
+                    matched += 1
                 elif self._stem_es(kw_lower) in goal_stems:
                     score += 0.8
+                    matched += 1
+
+            # Bonus por descripción, pero limitado
             desc = proc.get("description", "").lower()
             desc_stems = {self._stem_es(w) for w in re.findall(r'\w+', desc) if len(w) > 2}
             common_stems = goal_stems & desc_stems
             if common_stems:
-                score += min(len(common_stems) * 0.5, 2.0)
+                score += min(len(common_stems) * 0.3, 1.5)
+
+            # Calcular ratio de keywords específicas que hicieron match
+            ratio = matched / len(specific_kws) if specific_kws else 0
+
             if score > best_score:
                 best_score = score
+                best_ratio = ratio
                 best_match = proc
 
-        if best_match and best_score >= 2:
-            logger.info(f"Procedimiento encontrado: '{best_match.get('description','')}' (score={best_score:.1f})")
+        # Requisitos: score >= 3 Y al menos 40% de keywords específicas coinciden
+        if best_match and best_score >= 3 and best_ratio >= 0.4:
+            logger.info(
+                f"Procedimiento encontrado: '{best_match.get('description','')}' "
+                f"(score={best_score:.1f}, ratio={best_ratio:.0%})"
+            )
             return best_match
+        if best_match and best_score >= 2:
+            logger.info(
+                f"Procedimiento candidato descartado: '{best_match.get('description','')[:60]}' "
+                f"(score={best_score:.1f}, ratio={best_ratio:.0%}) — umbral no alcanzado"
+            )
         return None
 
     def save_procedure(self, description: str, keywords: list[str],
                        steps: list[dict], site: str = ""):
+        # ── Validar que la descripción es accionable (no una queja/frase suelta) ──
+        desc_lower = description.lower().strip()
+        _junk_patterns = [
+            r"^(?:es\s*que|esque)",                # "esque has abierto..."
+            r"^(?:no\s+se|no\s+entiendo)",        # "no se que le pasa"
+            r"^(?:ya\s+he|ya\s+está)",             # "ya he iniciado sesión"
+            r"^(?:por\s*qu[eé]|que\s+ha\s+pasado)", # "porque ha hecho eso"
+            r"(?:no\s+funciona|está\s+roto)",       # quejas
+        ]
+        if any(re.search(p, desc_lower) for p in _junk_patterns):
+            logger.info(f"Procedimiento rechazado (descripción no accionable): {description[:60]}")
+            return
+
+        # Filtrar keywords genéricas
+        filtered_kws = [
+            kw for kw in keywords
+            if kw.lower() not in self._GENERIC_KEYWORDS and len(kw) > 2
+        ]
+        if len(filtered_kws) < 2:
+            logger.info(f"Procedimiento rechazado (pocas keywords específicas): {description[:60]}")
+            return
+
         procedure = {
             "description": description,
-            "keywords": keywords,
+            "keywords": filtered_kws,
             "steps": steps,
             "site": site,
             "times_used": 0,
@@ -637,14 +701,14 @@ class AutonomousAgent:
         if self.find_procedure(goal):
             return
 
-        # Extraer keywords significativas (> 3 chars, no stopwords)
+        # Extraer keywords significativas (> 3 chars, no stopwords ni genéricas)
         _stopwords = {
             'para', 'como', 'donde', 'mira', 'busca', 'quiero',
             'dime', 'revisa', 'enseña', 'muestra', 'hacer', 'tiene',
             'tiene', 'esta', 'esto', 'este', 'sobre', 'tarea',
             'entra', 'click', 'haga', 'quel', 'puedo', 'puedes',
             'algo', 'todo', 'nada', 'aqui', 'alla', 'dentro',
-        }
+        } | self._GENERIC_KEYWORDS
         keywords = [
             w for w in re.findall(r'\w+', goal.lower())
             if len(w) > 3 and w not in _stopwords

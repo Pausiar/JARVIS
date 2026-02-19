@@ -43,66 +43,7 @@
     "times_used": 10,
     "created_at": "2026-02-16 13:15"
   },
-  {
-    "description": "jarvis, entra en google, entra en \"whatsapp web\" busca el contacto \"Alejandro Hidalgo\" y enviale el ",
-    "keywords": [
-      "jarvis",
-      "google",
-      "whatsapp",
-      "contacto",
-      "alejandro",
-      "hidalgo",
-      "enviale",
-      "mensajes"
-    ],
-    "steps": [
-      {
-        "action": "open_application",
-        "params": {
-          "app_name": "chrome"
-        }
-      },
-      {
-        "action": "navigate_to_url",
-        "params": {
-          "url": "https://web.whatsapp.com"
-        }
-      },
-      {
-        "action": "search_in_page",
-        "params": {
-          "text": "Alejandro Hidalgo"
-        }
-      },
-      {
-        "action": "type_in_app",
-        "params": {
-          "text": "Hidalgo perroflauta"
-        }
-      },
-      {
-        "action": "press_key",
-        "params": {
-          "key": "enter"
-        }
-      },
-      {
-        "action": "press_key",
-        "params": {
-          "key": "enter"
-        }
-      },
-      {
-        "action": "press_key",
-        "params": {
-          "key": "enter"
-        }
-      }
-    ],
-    "site": "",
-    "times_used": 0,
-    "created_at": "2026-02-19 09:22"
-  },
+
   {
     "description": "Resumen del documento PDF",
     "keywords": [
@@ -152,37 +93,34 @@
     "times_used": 1,
     "created_at": "2026-02-19 09:29"
   },
+
   {
-    "description": "ya he iniciado sesión, miralo ahora",
+    "description": "Generar un icono que represente al usuario",
     "keywords": [
-      "iniciado",
-      "sesión",
-      "miralo",
-      "ahora"
+      "icono",
+      "representación"
     ],
     "steps": [
       {
-        "action": "click_on_text",
+        "action": "switch_tab",
         "params": {
-          "text": "aules.edu.gva.es/fp/my/"
+          "text": "nueva pestaña"
         }
       },
       {
-        "action": "search_in_page",
-        "params": {
-          "text": "Desenvolupament d'interfícies-2CFS"
-        }
+        "action": "close_tab",
+        "params": {}
       },
       {
-        "action": "click_on_text",
+        "action": "navigate_to_url",
         "params": {
-          "text": "Busca..."
+          "url": "https://chatgpt.com"
         }
       },
       {
         "action": "type_in_app",
         "params": {
-          "text": "Desenvolupament d'interfícies"
+          "text": "generar un icono que me represente"
         }
       },
       {
@@ -192,8 +130,8 @@
         }
       }
     ],
-    "site": "aules",
+    "site": "chatgpt",
     "times_used": 0,
-    "created_at": "2026-02-19 09:39"
+    "created_at": "2026-02-19 10:15"
   }
 ]
