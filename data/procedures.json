@@ -40,7 +40,160 @@
       }
     ],
     "site": "aules",
-    "times_used": 9,
+    "times_used": 10,
     "created_at": "2026-02-16 13:15"
+  },
+  {
+    "description": "jarvis, entra en google, entra en \"whatsapp web\" busca el contacto \"Alejandro Hidalgo\" y enviale el ",
+    "keywords": [
+      "jarvis",
+      "google",
+      "whatsapp",
+      "contacto",
+      "alejandro",
+      "hidalgo",
+      "enviale",
+      "mensajes"
+    ],
+    "steps": [
+      {
+        "action": "open_application",
+        "params": {
+          "app_name": "chrome"
+        }
+      },
+      {
+        "action": "navigate_to_url",
+        "params": {
+          "url": "https://web.whatsapp.com"
+        }
+      },
+      {
+        "action": "search_in_page",
+        "params": {
+          "text": "Alejandro Hidalgo"
+        }
+      },
+      {
+        "action": "type_in_app",
+        "params": {
+          "text": "Hidalgo perroflauta"
+        }
+      },
+      {
+        "action": "press_key",
+        "params": {
+          "key": "enter"
+        }
+      },
+      {
+        "action": "press_key",
+        "params": {
+          "key": "enter"
+        }
+      },
+      {
+        "action": "press_key",
+        "params": {
+          "key": "enter"
+        }
+      }
+    ],
+    "site": "",
+    "times_used": 0,
+    "created_at": "2026-02-19 09:22"
+  },
+  {
+    "description": "Resumen del documento PDF",
+    "keywords": [
+      "pdf",
+      "resumen",
+      "documento"
+    ],
+    "steps": [
+      {
+        "action": "navigate_to_url",
+        "params": {
+          "url": "explorador de archivos"
+        }
+      },
+      {
+        "action": "type_in_app",
+        "params": {
+          "text": "Actividad 1_Tema 7.pdf"
+        }
+      },
+      {
+        "action": "press_key",
+        "params": {
+          "key": "enter"
+        }
+      },
+      {
+        "action": "wait",
+        "params": {
+          "seconds": 2
+        }
+      },
+      {
+        "action": "analyze_document",
+        "params": {
+          "document": "Actividad 1_Tema 7.pdf"
+        }
+      },
+      {
+        "action": "summarize",
+        "params": {
+          "document": "Actividad 1_Tema 7.pdf"
+        }
+      }
+    ],
+    "site": "explorador de archivos",
+    "times_used": 1,
+    "created_at": "2026-02-19 09:29"
+  },
+  {
+    "description": "ya he iniciado sesión, miralo ahora",
+    "keywords": [
+      "iniciado",
+      "sesión",
+      "miralo",
+      "ahora"
+    ],
+    "steps": [
+      {
+        "action": "click_on_text",
+        "params": {
+          "text": "aules.edu.gva.es/fp/my/"
+        }
+      },
+      {
+        "action": "search_in_page",
+        "params": {
+          "text": "Desenvolupament d'interfícies-2CFS"
+        }
+      },
+      {
+        "action": "click_on_text",
+        "params": {
+          "text": "Busca..."
+        }
+      },
+      {
+        "action": "type_in_app",
+        "params": {
+          "text": "Desenvolupament d'interfícies"
+        }
+      },
+      {
+        "action": "press_key",
+        "params": {
+          "key": "enter"
+        }
+      }
+    ],
+    "site": "aules",
+    "times_used": 0,
+    "created_at": "2026-02-19 09:39"
   }
 ]

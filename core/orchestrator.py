@@ -193,32 +193,14 @@ class Orchestrator:
             self.memory.save_message("assistant", learn_response)
             return learn_response
 
-        # ── Comandos directos por regex (NO necesitan pantalla ni LLM) ──
-        # Solo: abrir app CONOCIDA, volumen, brillo, screenshot, etc.
-        fast_result = self._try_fast_command(user_input)
-        if fast_result:
-            logger.info(f"Comando rápido ejecutado: {fast_result[:80]}")
-            self.memory.save_message("assistant", fast_result)
-            return fast_result
-
-        # ── ¿Conversación pura? (preguntas, charla, sin acciones) ──
-        if self._is_chat_only(user_input):
-            logger.info("Conversación pura, usando LLM.")
-            context = self._build_context_minimal()
-            llm_response = self.brain.chat(user_input, context=context)
-            clean_response = self.brain.clean_response(llm_response)
-            self.memory.save_message("assistant", clean_response)
-            return clean_response
-
         # ══════════════════════════════════════════════════════
-        #  TODO LO DEMÁS → Agente autónomo
-        #  El agente LEE la pantalla, hace un PLAN y lo EJECUTA.
-        #  Esta es la ruta para: "entra en drive", "descarga el pdf",
-        #  "haz click en X", "busca las tareas", etc.
+        #  TODO lo demás → Agente autónomo
+        #  El agente recibe la petición, la pasa al LLM para que
+        #  haga una lista de pasos, y los ejecuta uno a uno.
+        #  Si hay dudas, pregunta al usuario.
         # ══════════════════════════════════════════════════════
-        logger.info(f"Delegando al agente autónomo: '{user_input[:80]}'")
+        logger.info(f"Delegando al agente: '{user_input[:80]}'")
         self._last_goal = user_input
-        # Pasar las últimas líneas del chat para que el agente tenga contexto
         recent = self.memory.get_recent_messages(limit=6)
         chat_ctx = "\n".join(
             f"{m['role']}: {m['content'][:120]}" for m in recent
@@ -228,159 +210,6 @@ class Orchestrator:
         )
         self.memory.save_message("assistant", agent_result)
         return agent_result
-
-    # ─── Comandos rápidos por regex ─────────────────────────
-
-    # Apps que se pueden abrir DIRECTAMENTE (sin leer pantalla)
-    _KNOWN_APPS = {
-        "chrome", "firefox", "edge", "brave", "opera",
-        "explorer", "explorador", "word", "excel", "powerpoint",
-        "notepad", "bloc de notas", "calculadora", "calculator",
-        "spotify", "discord", "steam", "telegram", "whatsapp",
-        "teams", "zoom", "slack", "obs", "vlc", "paint",
-        "terminal", "powershell", "cmd", "vscode", "code",
-        "visual studio", "blender", "gimp", "audacity",
-        "outlook", "correo", "gmail", "mail", "google",
-    }
-
-    def _try_fast_command(self, text: str) -> Optional[str]:
-        """
-        Ejecuta comandos que NO necesitan ver la pantalla ni llamar al LLM.
-        Solo: abrir app conocida, volumen, brillo, screenshot, búsqueda web.
-        Devuelve None si no puede resolverlo aquí.
-        """
-        text_lower = text.lower().strip()
-
-        # ── "abre chrome", "abre spotify", etc. ──
-        m = re.match(
-            r"(?:abre|abrir|open|ejecuta|lanza|inicia)\s+"
-            r"(?:la\s+app\s+(?:de\s+)?|la\s+aplicaci[oó]n\s+(?:de\s+)?|el\s+)?"
-            r"(.+?)\.?\s*$",
-            text_lower,
-        )
-        if m:
-            app = m.group(1).strip()
-            if any(k in app for k in self._KNOWN_APPS):
-                sc = self.modules.get("system_control")
-                if sc:
-                    result = sc.open_application(app)
-                    return f"Hecho, señor. {result}" if result else None
-
-        # ── "cierra chrome", etc. ──
-        m = re.match(
-            r"(?:cierra|cerrar|close)\s+(.+?)\.?\s*$",
-            text_lower,
-        )
-        if m:
-            app = m.group(1).strip()
-            if any(k in app for k in self._KNOWN_APPS):
-                sc = self.modules.get("system_control")
-                if sc:
-                    result = sc.close_application(app)
-                    return f"Hecho, señor. {result}" if result else None
-
-        # ── Volumen ──
-        if re.search(r"sube.*volumen|volumen.*(?:m[aá]s|arriba|sube)", text_lower):
-            sc = self.modules.get("system_control")
-            if sc:
-                return f"Hecho, señor. {sc.volume_up()}"
-        if re.search(r"baja.*volumen|volumen.*(?:menos|abajo|baja)", text_lower):
-            sc = self.modules.get("system_control")
-            if sc:
-                return f"Hecho, señor. {sc.volume_down()}"
-        m = re.search(r"volumen\s+(?:al?\s+)?(\d+)", text_lower)
-        if m:
-            sc = self.modules.get("system_control")
-            if sc:
-                return f"Hecho, señor. {sc.set_volume(int(m.group(1)))}"
-        if re.search(r"(?:mute|silencia|mut[ea])", text_lower):
-            sc = self.modules.get("system_control")
-            if sc:
-                return f"Hecho, señor. {sc.toggle_mute()}"
-
-        # ── Screenshot ──
-        if re.search(r"captura|screenshot|pantallazo", text_lower):
-            sc = self.modules.get("system_control")
-            if sc:
-                return f"Hecho, señor. {sc.take_screenshot()}"
-
-        # ── Brillo ──
-        if re.search(r"sube.*brillo|brillo.*(?:m[aá]s|arriba)", text_lower):
-            sc = self.modules.get("system_control")
-            if sc:
-                return f"Hecho, señor. {sc.brightness_up()}"
-        if re.search(r"baja.*brillo|brillo.*(?:menos|abajo)", text_lower):
-            sc = self.modules.get("system_control")
-            if sc:
-                return f"Hecho, señor. {sc.brightness_down()}"
-
-        # ── Búsqueda web explícita: "busca en google X" ──
-        m = re.match(
-            r"(?:busca|buscar|search)\s+(?:en\s+(?:google|internet|la\s+web)\s+)"
-            r"(.+?)\.?\s*$",
-            text_lower,
-        )
-        if m:
-            ws = self.modules.get("web_search")
-            if ws:
-                return ws.search(m.group(1).strip())
-
-        # ── Apagar / reiniciar / bloquear ──
-        if re.search(r"bloquea.*pantalla|lock\s+screen", text_lower):
-            sc = self.modules.get("system_control")
-            if sc:
-                return f"Hecho, señor. {sc.lock_screen()}"
-        if re.search(r"apaga.*(?:ordenador|pc|equipo)|shutdown", text_lower):
-            sc = self.modules.get("system_control")
-            if sc:
-                return f"Hecho, señor. {sc.shutdown()}"
-        if re.search(r"reinicia.*(?:ordenador|pc|equipo)|restart", text_lower):
-            sc = self.modules.get("system_control")
-            if sc:
-                return f"Hecho, señor. {sc.restart()}"
-
-        return None
-
-    def _is_chat_only(self, text: str) -> bool:
-        """
-        Detecta si es una pregunta/conversación pura que NO requiere
-        interactuar con el ordenador (no necesita agente).
-        """
-        text_lower = text.lower().strip()
-
-        # Si menciona la pantalla → NO es chat, necesita agente
-        if re.search(
-            r"pantalla|lo\s+que\s+(?:hay|se\s+ve|pone|dice)|"
-            r"lo\s+que\s+(?:tengo|veo)\s+(?:en|aqu[ií])",
-            text_lower,
-        ):
-            return False
-
-        # Preguntas conversacionales (no requieren acciones mecánicas)
-        if re.match(
-            r"(?:qu[eé]\s+(?:es|son|significa|opinas\s+(?:de|sobre))|"
-            r"c[oó]mo\s+(?:est[aá]s|funciona|se\s+(?:hace|dice|llama))|"
-            r"por\s*qu[eé]|qui[eé]n\s+(?:es|fue|era)|"
-            r"cu[aá]ndo\s+(?:fue|es|ser[aá])|"
-            r"d[oó]nde\s+(?:est[aá]|queda)|"
-            r"cu[eé]ntame|expl[ií]came|def[ií]neme|"
-            r"trad[uú]ce(?:me)?|recomienda|sugiere|"
-            r"haz(?:me)?\s+(?:un|una)\s+(?:chiste|broma|historia|resumen|poema))",
-            text_lower,
-        ):
-            return True
-
-        # "dime qué es X", "sabes qué es X", etc.
-        if re.match(
-            r"(?:dime|sabes|conoces)\s+(?:qu[eé]|c[oó]mo|por\s*qu[eé]|qui[eé]n)",
-            text_lower,
-        ):
-            return True
-
-        # Frases muy cortas sin verbos de acción → probablemente chat
-        # Ej: "qué opinas", "gracias", "vale" (ya gestionados por greeting/local)
-
-        return False
 
     # ─── Evaluación inteligente de resultados ────────────────
 

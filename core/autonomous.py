@@ -200,93 +200,80 @@ class AutonomousAgent:
     def _understand_and_plan(self, goal: str, screen_text: str,
                               context: str = "") -> dict:
         """
-        Usa el LLM para entender qué quiere el usuario y crear un plan.
+        Pasa la petición al LLM y recibe una lista de pasos a ejecutar.
 
         Returns dict:
           understanding  — qué quiere el usuario
           already_found  — bool, si la info ya está completa en pantalla
           found_response — respuesta si already_found=true
-          needs_navigation — bool
-          site           — "aules" | "classroom" | ...
           plan           — lista de pasos [{step, description, action, params}, ...]
+          questions      — lista de preguntas para el usuario (si las hay)
         """
         screen_ctx = screen_text[:3000] if screen_text else "(no hay pantalla visible)"
-
-        # Memoria de pantallas anteriores para dar contexto
-        memory_ctx = ""
-        if self._screen_memory:
-            memory_ctx = (
-                "\nPantallas vistas anteriormente (contexto):\n"
-                + "\n---\n".join(self._screen_memory[-2:])
-                + "\n---\n"
-            )
 
         # Conversación reciente para entender referencias
         conv_ctx = ""
         if context:
             conv_ctx = (
-                "\nConversación reciente (para entender referencias como "
-                "'eso', 'lo', 'el anterior'):\n"
+                "\nConversación reciente:\n"
                 + context[:500] + "\n"
             )
 
         prompt = (
-            f"El usuario me ha dicho: \"{goal}\"\n\n"
+            f"Me han pedido realizar esta tarea: \"{goal}\"\n\n"
             f"{conv_ctx}"
-            f"PANTALLA ACTUAL (OCR):\n---\n{screen_ctx}\n---\n"
-            f"{memory_ctx}\n"
-            "TAREA: Crea un PLAN para lograr lo que pide el usuario.\n\n"
-            "REGLAS CRÍTICAS:\n"
-            "1. BASA TU PLAN EN LO QUE VES EN PANTALLA. No inventes.\n"
-            "   Si el usuario dice 'entra en Drive' y ves 'Drive' en el OCR,\n"
-            "   el plan es SOLO: click_on_text('Drive').\n"
-            "2. NUNCA abras una aplicación diferente a menos que el usuario lo pida.\n"
-            "   Si el usuario habla del navegador, NO abras el Explorador de archivos.\n"
-            "3. PLANES CORTOS: 1-3 pasos. Mínimo necesario.\n"
-            "4. Para click_on_text: usa texto EXACTO del OCR, no frases del usuario.\n"
-            "   Busca la palabra o frase más corta que identifique el elemento.\n"
-            "5. Si no ves el elemento buscado en el OCR → scroll_page('down')\n"
-            "   o search_in_page para encontrarlo. NO inventes otros pasos.\n"
-            "6. Si la info que pide el usuario ya está COMPLETA en el OCR → already_found=true.\n"
-            "7. Si no sabes qué hacer → ask_user.\n\n"
+            f"Esto es lo que veo ahora en la pantalla del ordenador (texto extraído por OCR):\n"
+            f"---\n{screen_ctx}\n---\n\n"
+            "Hazme una lista por puntos de qué debería hacer para realizarla.\n"
+            "Si hay algo que no sepas hacer al 100%, dime qué le tengo que "
+            "preguntar a mi humano. Evita lo máximo posible hacer preguntas.\n\n"
+            "IMPORTANTE:\n"
+            "- Cada paso debe ser UNA acción mecánica concreta: hacer clic en algo, "
+            "escribir texto, pulsar una tecla, abrir una app, navegar a una URL, etc.\n"
+            "- Para hacer clic: usa el texto EXACTO que aparece en el OCR de arriba. "
+            "NO uses frases inventadas ni el texto del usuario.\n"
+            "- Si el elemento que busco ya está visible en el OCR, haz clic directamente. "
+            "NO abras otras aplicaciones.\n"
+            "- Si la información que pide el usuario ya está COMPLETA en el OCR, "
+            "pon already_found=true y responde directamente.\n\n"
             "Responde SOLO con JSON válido (sin markdown, sin ```json):\n"
             "{\n"
             '  "understanding": "qué quiere el usuario",\n'
             '  "already_found": false,\n'
             '  "found_response": "",\n'
+            '  "questions": [],\n'
             '  "plan": [\n'
             '    {"step": 1, "description": "qué hago", '
-            '"action": "click_on_text", "params": {"text": "Texto del OCR"} }\n'
+            '"action": "ACCION", "params": {"param": "valor"} }\n'
             "  ]\n"
             "}\n\n"
-            "Acciones:\n"
-            "- click_on_text: {text: 'EXACTO del OCR'}\n"
-            "- double_click: {text: 'EXACTO del OCR'}\n"
-            "- right_click: {text: 'texto'}\n"
-            "- describe_and_click: {description: 'descripción visual'}\n"
-            "- scroll_page: {direction: 'down'|'up'}\n"
+            "Acciones disponibles:\n"
+            "- open_application: {app_name: 'chrome'|'explorer'|...}\n"
             "- navigate_to_url: {url: '...'}\n"
-            "- open_application: {app_name: '...'}\n"
-            "- focus_window: {app_name: '...'}\n"
-            "- search_in_page: {text: '...'}\n"
+            "- click_on_text: {text: 'texto EXACTO del OCR'}\n"
+            "- double_click: {text: 'texto EXACTO del OCR'}\n"
+            "- right_click: {text: 'texto'}\n"
+            "- scroll_page: {direction: 'down'|'up'}\n"
             "- type_in_app: {text: '...'}\n"
             "- press_key: {key: 'enter'|'tab'|'ctrl+f'|...}\n"
-            "- read_screen: {} — solo para leer info y reportar al usuario\n"
+            "- search_in_page: {text: '...'} — buscar con Ctrl+F\n"
+            "- focus_window: {app_name: '...'}\n"
+            "- read_screen: {} — leer la pantalla y decirle al usuario lo que hay\n"
             "- wait: {seconds: N}\n"
             "- ask_user: {question: '¿...?'}\n"
         )
 
         messages = [
             {"role": "system", "content": (
-                "Eres el cerebro de un agente que controla un escritorio Windows. "
-                "Ves la pantalla por OCR y creas planes de acción. "
+                "Eres un asistente local de IA que controla un escritorio Windows. "
+                "Tu trabajo es recibir una petición y devolver una lista de pasos "
+                "mecánicos para realizarla: abrir apps, hacer clic, escribir, "
+                "pulsar teclas, etc. "
+                "Ves la pantalla del usuario por OCR. "
+                "Si un elemento está visible en el OCR, haz clic en él directamente. "
+                "NO abras aplicaciones que el usuario no ha pedido. "
                 "Responde SOLO con JSON válido. "
-                "REGLA #1: Tu plan se basa en lo que VES en la pantalla. "
-                "Si el usuario dice 'entra en X' y 'X' aparece en el OCR, "
-                "el plan es click_on_text('X'). Nada más. "
-                "REGLA #2: NUNCA abras una app diferente a la que el usuario usa. "
-                "Si el usuario está en Chrome, NO abras Explorer. "
-                "REGLA #3: Planes de 1-3 pasos. Mínimo necesario."
+                "Si no sabes algo, ponlo en 'questions' en vez de inventar."
             )},
             {"role": "user", "content": prompt},
         ]
@@ -323,89 +310,7 @@ class AutonomousAgent:
                 "site": "",
             }
 
-    # ═══════════════════════════════════════════════════════════
-    #  FASE 2: EVALUAR después de cada paso
-    #  ¿El paso funcionó? ¿He llegado? ¿Replanificar?
-    # ═══════════════════════════════════════════════════════════
-
-    def _evaluate_after_step(self, goal: str, screen_text: str,
-                              executed_steps: list, remaining_plan: list) -> dict:
-        """
-        Después de ejecutar un paso, mira la pantalla y decide:
-        - continue: seguir con el plan
-        - found: la info buscada ya está en pantalla
-        - replan: la pantalla cambió y hay que replanificar
-        - ask_user: estoy perdido, preguntar al usuario
-
-        Returns dict:
-          status: "continue" | "found" | "replan" | "ask_user"
-          response: (si found) texto para el usuario
-          question: (si ask_user) pregunta al usuario
-        """
-        screen_ctx = screen_text[:3000] if screen_text else "(pantalla vacía)"
-
-        steps_desc = ""
-        if executed_steps:
-            steps_desc = "Pasos ya ejecutados:\n"
-            for i, s in enumerate(executed_steps, 1):
-                steps_desc += f"  {i}. {s.get('description', s.get('action', '?'))}\n"
-
-        remaining_desc = ""
-        if remaining_plan:
-            remaining_desc = "Pasos que quedan en el plan:\n"
-            for s in remaining_plan:
-                remaining_desc += f"  - {s.get('description', s.get('action', '?'))}\n"
-
-        prompt = (
-            f"Objetivo del usuario: \"{goal}\"\n\n"
-            f"{steps_desc}\n"
-            f"Pantalla actual (OCR):\n---\n{screen_ctx}\n---\n\n"
-            f"{remaining_desc}\n"
-            "¿Qué hago ahora? Responde SOLO con JSON (sin markdown):\n\n"
-            "a) Si la pantalla ahora muestra la INFO COMPLETA que busca el usuario:\n"
-            '   {"status": "found", "response": "Señor, [resumen detallado de lo que ves]"}\n\n'
-            "b) Si el plan restante sigue siendo válido para esta pantalla:\n"
-            '   {"status": "continue"}\n\n'
-            "c) Si la pantalla cambió y el plan ya no tiene sentido:\n"
-            '   {"status": "replan"}\n\n'
-            "d) Si no sé qué hacer / no veo lo esperado:\n"
-            '   {"status": "ask_user", "question": "Señor, [pregunta concreta]"}\n\n'
-            "REGLAS ESTRICTAS:\n"
-            "- Solo 'found' si la información ESPECÍFICA y COMPLETA está visible EN EL OCR.\n"
-            "- NO digas 'found' solo porque ejecutaste una acción. Necesitas VER el resultado.\n"
-            "- EXCEPCIÓN: si el objetivo era HACER CLIC / DESCARGAR / ABRIR algo,\n"
-            "  y la pantalla cambió (contenido diferente al anterior), responde 'found':\n"
-            '  {"status": "found", "response": "Listo, señor. He hecho clic en [elemento]."}\n'
-            "- Si la pantalla NO cambió después de un clic, responde 'replan' o 'ask_user'.\n"
-            "- Si estás en una lista de tareas pero no has entrado en la tarea → continue/replan.\n"
-            "- Si acabas de entrar en una tarea y ves el enunciado/documento → found.\n"
-            "- Si la última acción fue un clic pero el OCR sigue mostrando lo mismo → replan.\n"
-            "- Si NO quedan más pasos en el plan y la pantalla cambió → responde 'found'.\n"
-            "- NUNCA inventes información que no esté en el OCR de arriba."
-        )
-
-        messages = [
-            {"role": "system", "content": (
-                "Eres el evaluador de un agente de automatización. "
-                "Miras la pantalla después de cada acción y decides si continuar. "
-                "Responde SOLO con JSON válido."
-            )},
-            {"role": "user", "content": prompt},
-        ]
-
-        raw = self.brain.chat_raw(messages)
-        try:
-            cleaned = raw.strip()
-            if cleaned.startswith("```"):
-                cleaned = re.sub(r"^```\w*\n?", "", cleaned)
-                cleaned = re.sub(r"\n?```$", "", cleaned)
-            result = json.loads(cleaned)
-            logger.info(f"Evaluación: {result.get('status', '???')}")
-            return result
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.warning(f"Error en _evaluate: {e}. Raw: {raw[:200]}")
-            # Default: seguir con el plan
-            return {"status": "continue"}
+    # (Evaluador de pasos eliminado — ejecución directa mecánica)
 
     # ═══════════════════════════════════════════════════════════
     #  EJECUTAR OBJETIVO  —  Punto de entrada principal
@@ -447,75 +352,13 @@ class AutonomousAgent:
 
     def _execute_goal_inner(self, goal: str, initial_actions: list = None,
                             context: str = "") -> str:
-        """Implementación interna de execute_goal (envuelta en try/except)."""
-
-        # ── Fast path: comandos simples de clic ──
-        click_type, click_target = self._detect_simple_click(goal)
-        if click_type and click_target:
-            logger.info(f"Fast path: {click_type} en '{click_target}'")
-            if click_type == "double_click":
-                self.sc.double_click(click_target)
-                time.sleep(1)
-                return f"Listo, he hecho doble clic en '{click_target}', señor."
-            result = str(self.sc.click_on_text(click_target) or "")
-            if "no se encontró" not in result.lower() and "not found" not in result.lower():
-                time.sleep(1)
-                return f"Listo, he hecho clic en '{click_target}', señor."
-            logger.info("Fast path: texto no encontrado, usando agente completo")
-
-        # ── Fast path: "abre X" con app conocida ──
-        m_open = re.match(
-            r"(?:abre|abrir|open|ejecuta|lanza|inicia)\s+"
-            r"(?:la\s+)?(?:app\s+|aplicaci[oó]n\s+)?"
-            r"(.+?)\.?\s*$", goal, re.IGNORECASE)
-        if m_open:
-            app = m_open.group(1).strip().lower()
-            _fast_apps = {
-                "chrome", "firefox", "edge", "brave", "opera",
-                "explorer", "explorador", "word", "excel", "powerpoint",
-                "notepad", "bloc de notas", "calculadora", "calculator",
-                "spotify", "discord", "steam", "telegram", "whatsapp",
-                "teams", "zoom", "slack", "obs", "vlc", "paint",
-                "terminal", "powershell", "cmd", "vscode", "code",
-                "visual studio", "blender", "gimp", "audacity",
-                "outlook", "correo",
-            }
-            if any(k in app for k in _fast_apps):
-                logger.info(f"Fast path: abriendo '{app}'")
-                self.sc.open_application(app)
-                time.sleep(2)
-                return f"Listo, he abierto {app}, señor."
-
-        # ── Fast path: navega/ve a URL ──
-        m_nav = re.match(
-            r"(?:navega|ve|ir|entra|accede)\s+(?:a|en)\s+"
-            r"(https?://\S+|www\.\S+)", goal, re.IGNORECASE)
-        if m_nav:
-            url = m_nav.group(1).strip()
-            logger.info(f"Fast path: navegando a '{url}'")
-            self.sc.navigate_to_url(url)
-            time.sleep(2)
-            return f"Listo, he navegado a {url}, señor."
-
-        # ── Fast path: scroll arriba/abajo ──
-        m_scroll = re.match(
-            r"(?:scroll|desplaza|baja|sube)\s*(?:hacia\s+)?"
-            r"(arriba|abajo|up|down)", goal, re.IGNORECASE)
-        if m_scroll:
-            direction = "up" if m_scroll.group(1).lower() in ("arriba", "up") else "down"
-            logger.info(f"Fast path: scroll {direction}")
-            self.sc.scroll_page(direction)
-            return f"Listo, he hecho scroll hacia {direction}, señor."
-
-        # ── Fast path: teclas especiales ──
-        m_key = re.match(
-            r"(?:pulsa|presiona|press|aprieta)\s+(?:la\s+tecla\s+)?"
-            r"(.+?)\.?\s*$", goal, re.IGNORECASE)
-        if m_key:
-            key = m_key.group(1).strip().lower()
-            logger.info(f"Fast path: tecla '{key}'")
-            self.sc.press_key(key)
-            return f"Listo, he pulsado {key}, señor."
+        """
+        Flujo simple:
+        1. Pasar petición al LLM → recibir lista de pasos
+        2. Ejecutar cada paso mecánicamente
+        3. Si hay preguntas → preguntar al usuario
+        4. Confirmar que se ha hecho
+        """
 
         # ¿Tenemos un procedimiento guardado?
         procedure = self.find_procedure(goal)
@@ -530,15 +373,15 @@ class AutonomousAgent:
                 return result
             logger.info("Procedimiento falló, usando agente dinámico")
 
-        # Si hay acciones iniciales (compound parser ya abrió Chrome/navegó)
+        # Si hay acciones iniciales (ya se abrió algo previamente)
         if initial_actions:
             time.sleep(2)
 
-        # ── Ciclo principal: Plan → Ejecutar → Evaluar → Replanificar ──
+        # ── Ciclo principal: Planificar → Ejecutar → Verificar ──
         executed_steps = []
         total_steps = 0
         replan_count = 0
-        MAX_REPLANS = 2  # Máximo de veces que replanificamos
+        MAX_REPLANS = 2
 
         while total_steps < MAX_STEPS and replan_count <= MAX_REPLANS:
             # 1. OBSERVAR pantalla
@@ -573,12 +416,24 @@ class AutonomousAgent:
             if understanding.get("already_found"):
                 response = understanding.get("found_response", "")
                 if response and len(response) > 20:
-                    logger.info("Agente: ya encontró la info en pantalla")
+                    logger.info("Agente: info ya encontrada en pantalla")
                     return response
+
+            # ¿Hay preguntas para el usuario?
+            questions = understanding.get("questions", [])
+            if questions:
+                q_text = "\n".join(f"- {q}" for q in questions)
+                logger.info(f"El LLM tiene preguntas: {questions}")
+                self._pending_question = (
+                    f"Señor, necesito aclarar algunas cosas antes de continuar:\n{q_text}"
+                )
+                self._pending_goal = goal
+                self._pending_plan = understanding.get("plan", [])
+                self._pending_executed = executed_steps
+                return self._pending_question
 
             plan = understanding.get("plan", [])
             if not plan:
-                # Sin plan → preguntar al usuario
                 logger.info("Sin plan generado. Preguntando al usuario.")
                 self._pending_question = (
                     "Señor, estoy viendo la pantalla pero no sé cómo continuar. "
@@ -589,7 +444,7 @@ class AutonomousAgent:
                 self._pending_executed = executed_steps
                 return self._pending_question
 
-            # 3. EJECUTAR el plan paso a paso
+            # 3. EJECUTAR cada paso del plan mecánicamente
             plan_completed = True
             for idx, step_info in enumerate(plan):
                 if total_steps >= MAX_STEPS:
@@ -603,7 +458,7 @@ class AutonomousAgent:
 
                 logger.info(f"Paso {total_steps}: {desc} → {action}({params})")
 
-                # ── Acción especial: read_screen ──
+                # ── read_screen: leer y reportar al usuario ──
                 if action == "read_screen":
                     time.sleep(1)
                     current = self._observe_screen()
@@ -616,7 +471,7 @@ class AutonomousAgent:
                             return summary
                     continue
 
-                # ── Acción especial: ask_user ──
+                # ── ask_user: preguntar al usuario ──
                 if action == "ask_user":
                     question = params.get("question",
                                           "¿Qué debo hacer ahora?")
@@ -631,127 +486,72 @@ class AutonomousAgent:
                         "futuras veces)"
                     )
 
-                # ── Ejecutar acción normal ──
+                # ── Ejecutar la acción mecánicamente ──
                 self._execute_action(action, params)
                 executed_steps.append({
                     "action": action,
                     "params": params,
                     "description": desc,
                 })
-                # Espera variable: acciones rápidas → 0.5s, resto → 1.5s
+
+                # Espera: acciones rápidas 0.5s, resto 1.5s
                 if action in self._FAST_ACTIONS:
                     time.sleep(0.5)
                 else:
                     time.sleep(1.5)
 
-                # ── EVALUAR: ¿funcionó? ¿sigo con el plan? ──
+                # ── Solo verificar pantalla en el ÚLTIMO paso ──
+                # o si es un clic (para detectar si falló)
                 remaining = plan[idx + 1:]
-                new_screen = self._observe_screen()
-                if not new_screen:
-                    # OCR falló post-acción, esperar y reintentar
-                    time.sleep(2)
+                is_click = action in {"click_on_text", "double_click",
+                                       "search_in_page"}
+
+                if not remaining or is_click:
                     new_screen = self._observe_screen()
-                if not new_screen:
-                    logger.warning("OCR vacío tras acción, continuando plan...")
-                    continue
+                    if new_screen:
+                        self._screen_memory.append(new_screen[:800])
 
-                self._screen_memory.append(new_screen[:800])
+                        # Si fue un clic, verificar que la pantalla cambió
+                        if is_click and screen_text:
+                            old_sig = set(screen_text.split())
+                            new_sig = set(new_screen.split())
+                            if old_sig and new_sig:
+                                overlap = len(old_sig & new_sig) / max(len(old_sig), len(new_sig))
+                                if overlap > 0.8:
+                                    logger.info(f"Pantalla NO cambió tras {action} "
+                                                f"(overlap={overlap:.0%}). Replanificando.")
+                                    replan_count += 1
+                                    plan_completed = False
+                                    break
 
-                # ── Detección de cambio de pantalla ──
-                # Si la pantalla NO cambió después de un clic, el clic
-                # probablemente falló.  No dejamos que el LLM evalúe
-                # porque podría decir "found" sin evidencia.
-                screen_changed = True
-                click_actions = {"click_on_text", "double_click",
-                                 "describe_and_click", "search_in_page"}
-                if action in click_actions and screen_text:
-                    # Comparar contenido significativo (ignorar espacios)
-                    old_sig = set(screen_text.split())
-                    new_sig = set(new_screen.split())
-                    # Si más del 80% de las palabras son iguales → no cambió
-                    if old_sig and new_sig:
-                        overlap = len(old_sig & new_sig) / max(len(old_sig), len(new_sig))
-                        if overlap > 0.8:
-                            screen_changed = False
-                            logger.info(f"Pantalla NO cambió tras clic "
-                                        f"(overlap={overlap:.0%}). Forzando replan.")
-
-                if not screen_changed:
-                    # Clic no funcionó → replanificar
-                    replan_count += 1
-                    plan_completed = False
-                    break
-
-                # Si no quedan pasos y la pantalla cambió → plan completado
-                if not remaining and screen_changed:
-                    logger.info("Último paso del plan + pantalla cambió → completado")
-                    break
-
-                # ── Optimización: para planes cortos (≤3 pasos), si la
-                # pantalla cambió, seguir sin llamar al evaluador LLM ──
-                if len(plan) <= 3 and screen_changed:
-                    logger.info(f"Plan corto ({len(plan)} pasos), pantalla cambió → "
-                                "saltando evaluador, continuando")
-                    continue
-
-                evaluation = self._evaluate_after_step(
-                    goal, new_screen, executed_steps, remaining
-                )
-
-                ev_status = evaluation.get("status", "continue")
-
-                if ev_status == "found":
-                    # ¡Encontramos lo que buscábamos!
-                    response = evaluation.get("response", "")
-                    if response and len(response) > 20:
-                        self._maybe_save_procedure(goal, executed_steps,
-                                                    screen_text)
-                        return response
-
-                elif ev_status == "ask_user":
-                    question = evaluation.get("question",
-                                              "¿Cómo debo continuar?")
-                    self._pending_question = question
-                    self._pending_goal = goal
-                    self._pending_plan = remaining
-                    self._pending_executed = executed_steps
-                    return (
-                        f"{question}\n\n"
-                        "(Indíqueme cómo continuar y lo recordaré)"
-                    )
-
-                elif ev_status == "replan":
-                    # La pantalla cambió → salimos del for para replanificar
-                    logger.info("Evaluación: replanificar")
-                    replan_count += 1
-                    plan_completed = False
-                    break
-
-                # else: "continue" → seguir con el plan
+                    if not remaining:
+                        logger.info("Último paso completado")
+                        break
 
             if plan_completed:
-                # Se ejecutó todo el plan sin read_screen final
-                # Si el objetivo era una ACCIÓN, no necesitamos LLM para resumir
-                if self._is_action_goal(goal):
-                    logger.info("Plan de acción completado, sin necesidad de resumen LLM")
+                # Plan completado — confirmar al usuario
+                if executed_steps:
+                    descs = [s.get('description', s.get('action', '?'))
+                             for s in executed_steps]
+                    if len(descs) == 1:
+                        result_msg = f"Listo, señor. {descs[0].capitalize()}."
+                    else:
+                        result_msg = f"Listo, señor. {'; '.join(descs)}."
+
+                    # Si el objetivo era obtener información, leer la pantalla
+                    if self._is_info_goal(goal):
+                        time.sleep(1)
+                        final_screen = self._observe_screen()
+                        if final_screen:
+                            summary = self._summarize_screen(goal, final_screen)
+                            if summary and len(summary) > 20:
+                                self._maybe_save_procedure(goal, executed_steps,
+                                                            screen_text)
+                                return summary
+
                     self._maybe_save_procedure(goal, executed_steps,
                                                 screen_text)
-                    # Mensaje claro describiendo qué se hizo
-                    if len(executed_steps) == 1:
-                        desc = executed_steps[0].get('description', 'la acción')
-                        return f"Listo, señor. {desc.capitalize()}."
-                    descs = [s.get('description', s.get('action','?')) for s in executed_steps]
-                    return f"Listo, señor. {'; '.join(descs)}."
-                # Para objetivos informativos, hacer lectura final
-                time.sleep(1)
-                final_screen = self._observe_screen()
-                if final_screen:
-                    self._screen_memory.append(final_screen[:800])
-                    summary = self._summarize_screen(goal, final_screen)
-                    if summary and len(summary) > 20:
-                        self._maybe_save_procedure(goal, executed_steps,
-                                                    screen_text)
-                        return summary
+                    return result_msg
                 break
 
             # Si no se completó el plan por replan, el while vuelve arriba
@@ -947,19 +747,17 @@ class AutonomousAgent:
             return text
         return result
 
-    # ─── Clasificación rápida del objetivo ───────────────────
+    # ─── Clasificación del objetivo ───────────────────────────
 
-    _ACTION_GOAL_RE = re.compile(
-        r"(?:haz|click?|doble\s+click?|descarga|abre|cierra|instala|ejecuta|"
-        r"escribe|pon|sube|baja|navega|entra|pulsa|pincha|"
-        r"mueve|copia|pega|selecciona|arrastra|"
-        r"minimiza|maximiza|bloquea|apaga|reinicia)",
+    _INFO_GOAL_RE = re.compile(
+        r"(?:qué|cuál|cuánto|dime|muestra|lee|consulta|busca\s+info|"
+        r"comprueba|averigua|investiga|cuéntame|explica)",
         re.IGNORECASE,
     )
 
-    def _is_action_goal(self, goal: str) -> bool:
-        """True si el objetivo es REALIZAR una acción, no obtener información."""
-        return bool(self._ACTION_GOAL_RE.search(goal))
+    def _is_info_goal(self, goal: str) -> bool:
+        """True si el objetivo es OBTENER información (no solo ejecutar una acción)."""
+        return bool(self._INFO_GOAL_RE.search(goal))
 
     # ─── Acciones rápidas (sin espera larga) ──────────────────
 
@@ -967,31 +765,6 @@ class AutonomousAgent:
         "press_key", "type_in_app", "scroll_page", "wait",
         "focus_window", "switch_tab",
     })
-
-    def _detect_simple_click(self, goal: str):
-        """Detecta comandos simples de click: 'haz click en X'.
-
-        Returns ('click'|'double_click', target) o (None, None).
-        """
-        g = goal.strip()
-        # Doble click
-        m = re.match(
-            r"(?:haz\s+)?doble\s+click?\s+(?:en|sobre|encima\s+de)\s+"
-            r"[\"']?(.+?)[\"']?\s*$", g, re.IGNORECASE)
-        if m:
-            return ("double_click", m.group(1).strip().strip('"\''))
-        # Click simple
-        m = re.match(
-            r"(?:haz\s+)?click?\s+(?:en|sobre|encima\s+de)\s+[\"']?(.+?)[\"']?\s*$"
-            r"|pincha\s+(?:en|sobre)\s+[\"']?(.+?)[\"']?\s*$"
-            r"|pulsa\s+(?:en|sobre)\s+[\"']?(.+?)[\"']?\s*$",
-            g, re.IGNORECASE)
-        if m:
-            target = next((x.strip().strip('"\'')
-                           for x in m.groups() if x), None)
-            if target:
-                return ("click", target)
-        return (None, None)
 
     def _observe_screen(self) -> str:
         """Lee el contenido visible de la pantalla via OCR.
