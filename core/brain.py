@@ -615,6 +615,7 @@ class JarvisBrain:
     def chat_stream(self, user_message: str, context: str = "") -> Generator[str, None, None]:
         """
         Envía un mensaje al LLM y obtiene la respuesta en streaming.
+        Soporta todos los modos: local (Ollama), cloud (GitHub Models, Gemini).
 
         Yields:
             Tokens de la respuesta uno a uno.
@@ -627,6 +628,18 @@ class JarvisBrain:
         messages = self._build_messages(full_message)
         full_response = ""
 
+        try:
+            if self.mode == "cloud":
+                yield from self._stream_cloud(messages)
+            else:
+                yield from self._stream_local(messages)
+        except Exception as e:
+            logger.error(f"Error en streaming: {e}")
+            yield f"Error: {str(e)}"
+
+    def _stream_local(self, messages: list[dict]) -> Generator[str, None, None]:
+        """Streaming con Ollama local."""
+        full_response = ""
         try:
             resp = requests.post(
                 f"{self.host}/api/chat",
@@ -656,16 +669,154 @@ class JarvisBrain:
                     if data.get("done", False):
                         break
 
-            # Guardar en historial
-            self.conversation_history.append(
-                {"role": "user", "content": user_message}
-            )
-            self.conversation_history.append(
-                {"role": "assistant", "content": full_response}
+            self.conversation_history.append({"role": "user", "content": messages[-1].get("content", "")})
+            self.conversation_history.append({"role": "assistant", "content": full_response})
+        except Exception as e:
+            logger.error(f"Error streaming local: {e}")
+            yield f"Error: {str(e)}"
+
+    def _stream_cloud(self, messages: list[dict]) -> Generator[str, None, None]:
+        """Streaming con API cloud (GitHub Models o Gemini)."""
+        api_key = self._get_cloud_api_key()
+        if not api_key:
+            yield f"No hay API key configurada para {self.cloud_provider}, señor."
+            return
+
+        if self.cloud_provider == "github":
+            yield from self._stream_github(messages, api_key)
+        elif self.cloud_provider == "gemini":
+            yield from self._stream_gemini(messages, api_key)
+        else:
+            yield f"Proveedor cloud '{self.cloud_provider}' no soporta streaming."
+
+    def _stream_github(self, messages: list[dict], api_key: str) -> Generator[str, None, None]:
+        """Streaming con GitHub Models API (OpenAI-compatible SSE)."""
+        full_response = ""
+        try:
+            model_lower = self.github_model.lower()
+            is_new_model = model_lower.startswith("gpt-5") or model_lower.startswith("raptor")
+
+            body = {
+                "model": self.github_model,
+                "messages": messages,
+                "stream": True,
+            }
+            if is_new_model:
+                body["max_completion_tokens"] = 1024
+            else:
+                body["max_tokens"] = 1024
+                body["temperature"] = 0.7
+
+            resp = requests.post(
+                self.CLOUD_ENDPOINTS["github"],
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+                timeout=60,
+                stream=True,
             )
 
+            if resp.status_code != 200:
+                yield f"Error GitHub Models (HTTP {resp.status_code})"
+                return
+
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                line_str = line.decode("utf-8") if isinstance(line, bytes) else line
+                if line_str.startswith("data: "):
+                    data_str = line_str[6:]
+                    if data_str.strip() == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(data_str)
+                        delta = data.get("choices", [{}])[0].get("delta", {})
+                        token = delta.get("content", "")
+                        if token:
+                            full_response += token
+                            yield token
+                    except json.JSONDecodeError:
+                        continue
+
+            self.conversation_history.append({"role": "user", "content": messages[-1].get("content", "")})
+            self.conversation_history.append({"role": "assistant", "content": full_response})
+
         except Exception as e:
-            logger.error(f"Error en streaming: {e}")
+            logger.error(f"Error streaming GitHub: {e}")
+            yield f"Error: {str(e)}"
+
+    def _stream_gemini(self, messages: list[dict], api_key: str) -> Generator[str, None, None]:
+        """Streaming con Google Gemini API."""
+        full_response = ""
+        try:
+            gemini_contents = []
+            system_instruction = None
+
+            for msg in messages:
+                role = msg["role"]
+                content = msg["content"]
+                if role == "system":
+                    system_instruction = content
+                elif role == "user":
+                    gemini_contents.append({
+                        "role": "user",
+                        "parts": [{"text": content}]
+                    })
+                elif role == "assistant":
+                    gemini_contents.append({
+                        "role": "model",
+                        "parts": [{"text": content}]
+                    })
+
+            url = self.CLOUD_ENDPOINTS["gemini"].format(model=self.gemini_model)
+            # streamGenerateContent para streaming
+            url = url.replace(":generateContent", ":streamGenerateContent")
+            url += f"?key={api_key}&alt=sse"
+
+            body = {
+                "contents": gemini_contents,
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "maxOutputTokens": 1024,
+                },
+            }
+            if system_instruction:
+                body["systemInstruction"] = {
+                    "parts": [{"text": system_instruction}]
+                }
+
+            resp = requests.post(url, json=body, timeout=60, stream=True)
+
+            if resp.status_code != 200:
+                yield f"Error Gemini (HTTP {resp.status_code})"
+                return
+
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                line_str = line.decode("utf-8") if isinstance(line, bytes) else line
+                if line_str.startswith("data: "):
+                    data_str = line_str[6:]
+                    try:
+                        data = json.loads(data_str)
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            for part in parts:
+                                token = part.get("text", "")
+                                if token:
+                                    full_response += token
+                                    yield token
+                    except json.JSONDecodeError:
+                        continue
+
+            self.conversation_history.append({"role": "user", "content": messages[-1].get("content", "")})
+            self.conversation_history.append({"role": "assistant", "content": full_response})
+
+        except Exception as e:
+            logger.error(f"Error streaming Gemini: {e}")
             yield f"Error: {str(e)}"
 
     # ─── Gestión de historial ─────────────────────────────────

@@ -5,9 +5,19 @@ detección de Spotify, control de YouTube en navegador.
 """
 
 import logging
+import os
 import subprocess
 import time
 from typing import Optional
+
+# ─── Helper: ocultar consolas en subprocess (.pyw) ────────
+_STARTUPINFO = None
+_CREATION_FLAGS = 0
+if os.name == 'nt':
+    _STARTUPINFO = subprocess.STARTUPINFO()
+    _STARTUPINFO.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    _STARTUPINFO.wShowWindow = 0
+    _CREATION_FLAGS = subprocess.CREATE_NO_WINDOW
 
 import sys
 from pathlib import Path
@@ -94,6 +104,7 @@ class MediaControl:
             result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
                 capture_output=True, text=True, timeout=5,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             output = result.stdout.strip()
 
@@ -118,6 +129,7 @@ class MediaControl:
                  "Get-Process -Name Spotify -ErrorAction SilentlyContinue | "
                  "Select-Object -First 1 -ExpandProperty Id"],
                 capture_output=True, text=True, timeout=5,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             if not result.stdout.strip():
                 return "Spotify no está abierto."
@@ -164,6 +176,7 @@ class MediaControl:
             result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
                 capture_output=True, text=True, timeout=5,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             return result.stdout.strip() == "OK"
         except Exception as e:

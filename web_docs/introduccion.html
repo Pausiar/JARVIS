@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Introducción — J.A.R.V.I.S. Ayuda</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══ TOPBAR ═══ -->
+<header class="topbar">
+  <button class="hamburger" aria-label="Menú">☰</button>
+  <div class="topbar-brand">
+    <div class="logo"></div>
+    <h1>J.A.R.V.I.S.</h1>
+    <span>Sistema de Ayuda</span>
+  </div>
+  <div class="topbar-search">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Buscar en la ayuda..." autocomplete="off">
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <nav class="topbar-nav">
+    <a href="index.html">🏠 Inicio</a>
+    <a href="indice.html">📑 Índice</a>
+  </nav>
+</header>
+
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sidebar">
+  <a href="index.html" class="sidebar-link-direct">🏠 Inicio</a>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title open"><span class="arrow">▶</span> 📘 Introducción</div>
+    <ul class="sidebar-links">
+      <li><a href="introduccion.html" class="current">¿Qué es J.A.R.V.I.S.?</a></li>
+      <li><a href="introduccion.html#caracteristicas">Características</a></li>
+      <li><a href="introduccion.html#requisitos">Requisitos del sistema</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🚀 Primeros pasos</div>
+    <ul class="sidebar-links">
+      <li><a href="instalacion.html">Instalación</a></li>
+      <li><a href="interfaz.html">Primera ejecución</a></li>
+      <li><a href="interfaz.html#configuracion-inicial">Configuración inicial</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> ⚙️ Funciones principales</div>
+    <ul class="sidebar-links">
+      <li><a href="comandos.html">Catálogo de comandos</a></li>
+      <li><a href="ocr.html">Interacción visual (OCR)</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🔧 Configuración</div>
+    <ul class="sidebar-links">
+      <li><a href="configuracion.html">Archivo config.py</a></li>
+      <li><a href="configuracion.html#plugins">Plugins</a></li>
+      <li><a href="configuracion.html#memoria">Memoria</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> ❌ Resolución de problemas</div>
+    <ul class="sidebar-links">
+      <li><a href="problemas.html">Problemas comunes</a></li>
+      <li><a href="problemas.html#faq">FAQ</a></li>
+    </ul>
+  </div>
+
+  <a href="indice.html" class="sidebar-link-direct">📑 Índice alfabético</a>
+</aside>
+
+<!-- ═══ MAIN ═══ -->
+<main class="main">
+
+  <div class="breadcrumb">
+    <a href="index.html">Inicio</a> <span class="sep">›</span>
+    <span class="current-crumb">Introducción</span>
+  </div>
+
+  <h1>📘 ¿Qué es J.A.R.V.I.S.?</h1>
+
+  <p><strong>J.A.R.V.I.S.</strong> (<em>Just A Rather Very Intelligent System</em>) es un asistente de escritorio con inteligencia artificial para <strong>Windows 10/11</strong>, inspirado en el J.A.R.V.I.S. de Iron Man.</p>
+
+  <p>Es una aplicación de código abierto, 100% funcional, que permite al usuario controlar su ordenador mediante <strong>lenguaje natural</strong> — por texto o por voz — con un modelo de IA que se ejecuta <strong>localmente</strong> (Ollama con Mistral) o mediante <strong>APIs cloud gratuitas</strong> (GitHub Models con GPT-4o-mini o Google Gemini 2.0 Flash).</p>
+
+  <p>No es solo un asistente de comandos: JARVIS tiene un <strong>agente autónomo</strong> capaz de leer la pantalla, planificar una secuencia de pasos y ejecutarlos de forma independiente para resolver tareas complejas — desde enviar un WhatsApp hasta resolver ejercicios de un PDF y escribir las soluciones en Word.</p>
+
+  <div class="callout callout-info">
+    <div class="callout-title">💡 ¿Para quién es?</div>
+    <p>Usuarios de Windows que quieran automatizar tareas cotidianas: abrir apps, buscar en internet, gestionar archivos, resolver ejercicios de PDF, controlar Spotify, y mucho más — todo hablando o escribiendo.</p>
+  </div>
+
+  <h2 id="caracteristicas">✨ Características principales</h2>
+
+  <table>
+    <thead>
+      <tr><th>Módulo</th><th>Descripción</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>🧠 <strong>Cerebro IA</strong></td><td>Conversación natural con modelos de lenguaje. <strong>Modo local</strong>: Ollama (Mistral, LLaMA 3, Phi-3). <strong>Modo cloud</strong>: GitHub Models (GPT-4o-mini, 20K req/día gratis) o Google Gemini (Gemini 2.0 Flash, gratuito)</td></tr>
+      <tr><td>🎙️ <strong>Voz</strong></td><td>Entrada por voz con <code>faster-whisper</code> + salida TTS con <code>Piper</code> (voz natural en español)</td></tr>
+      <tr><td>👁️ <strong>Visión OCR</strong></td><td>Lee la pantalla con <code>Windows.Media.Ocr</code> nativo. Hace clic inteligente por texto o descripción</td></tr>
+      <tr><td>⚙️ <strong>Sistema</strong></td><td>Abre/cierra apps, ajusta volumen/brillo, gestiona ventanas/pestañas, portapapeles</td></tr>
+      <tr><td>🌐 <strong>Web</strong></td><td>Búsquedas en Google (abre pestaña real en el navegador)</td></tr>
+      <tr><td>📁 <strong>Archivos</strong></td><td>Abrir, crear, mover, copiar, buscar y organizar archivos</td></tr>
+      <tr><td>📄 <strong>Documentos</strong></td><td>Leer y resumir PDF, Word, Excel, CSV, JSON. Resolver ejercicios automáticamente</td></tr>
+      <tr><td>🤖 <strong>Agente autónomo</strong></td><td>Planifica y ejecuta tareas complejas de múltiples pasos de forma independiente. Lee la pantalla, interactúa con apps, verifica resultados y aprende procedimientos para el futuro</td></tr>
+      <tr><td>📧 <strong>Email</strong></td><td>Envío de correos electrónicos con SMTP</td></tr>
+      <tr><td>💻 <strong>Código</strong></td><td>Ejecutar scripts Python en sandbox seguro</td></tr>
+      <tr><td>⏰ <strong>Automatización</strong></td><td>Timers, recordatorios, tareas programadas, calendario local</td></tr>
+      <tr><td>🧠 <strong>Memoria</strong></td><td>Recuerda conversaciones y preferencias en SQLite. Aprende procedimientos</td></tr>
+      <tr><td>🎵 <strong>Multimedia</strong></td><td>Media keys, control de Spotify, YouTube, volumen por aplicación</td></tr>
+      <tr><td>🔌 <strong>Plugins</strong></td><td>Sistema extensible con carga automática y hot-reload</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="requisitos">📋 Requisitos del sistema</h2>
+
+  <h3>Hardware</h3>
+  <table>
+    <thead>
+      <tr><th></th><th>Mínimo</th><th>Recomendado</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>OS</strong></td><td>Windows 10</td><td>Windows 11</td></tr>
+      <tr><td><strong>RAM</strong></td><td>8 GB</td><td>16 GB</td></tr>
+      <tr><td><strong>Disco</strong></td><td>~5 GB</td><td>~10 GB</td></tr>
+      <tr><td><strong>CPU</strong></td><td>x64 moderno</td><td>i5 / Ryzen 5 o superior</td></tr>
+      <tr><td><strong>GPU</strong></td><td>No necesaria</td><td>NVIDIA (CUDA) para acelerar Whisper</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Software</h3>
+  <ul>
+    <li><strong>Python 3.11+</strong> — <a href="https://www.python.org/downloads/" target="_blank">python.org</a> (marcar "Add Python to PATH")</li>
+    <li><strong>Ollama</strong> — <a href="https://ollama.com/download" target="_blank">ollama.com</a> (motor de IA local)</li>
+    <li><strong>Git</strong> — <a href="https://git-scm.com/download/win" target="_blank">git-scm.com</a></li>
+  </ul>
+
+  <div class="callout callout-warning">
+    <div class="callout-title">⚠️ ¿No tiene GPU o RAM suficiente?</div>
+    <p>Puede usar el <a href="configuracion.html#modo">modo cloud</a> para ejecutar la IA en servidores remotos (GitHub Models o Gemini) sin consumo de recursos locales.</p>
+  </div>
+
+  <h3>Tecnologías utilizadas</h3>
+  <table>
+    <thead>
+      <tr><th>Componente</th><th>Tecnología</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>LLM</td><td>Ollama + Mistral (local) / <strong>GitHub Models (GPT-4o-mini)</strong> / <strong>Google Gemini (2.0 Flash)</strong> (cloud)</td></tr>
+      <tr><td>STT (voz → texto)</td><td>faster-whisper (modelo <code>small</code>, español)</td></tr>
+      <tr><td>TTS (texto → voz)</td><td>Piper TTS (<code>es_ES-davefx-medium</code>)</td></tr>
+      <tr><td>OCR</td><td>Windows.Media.Ocr nativo (Win10/11)</td></tr>
+      <tr><td>Interfaz</td><td>PySide6 (Qt for Python)</td></tr>
+      <tr><td>Automatización</td><td>pyautogui + Win32 API via PowerShell</td></tr>
+      <tr><td>UI Automation</td><td>System.Windows.Automation via PowerShell</td></tr>
+      <tr><td>Base de datos</td><td>SQLite3 (stdlib)</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Nav -->
+  <div class="page-nav">
+    <a href="index.html">
+      <span><span class="nav-label">Anterior</span><span class="nav-title">← Inicio</span></span>
+    </a>
+    <a href="instalacion.html">
+      <span><span class="nav-label">Siguiente</span><span class="nav-title">Instalación →</span></span>
+    </a>
+  </div>
+
+</main>
+
+<div class="tip-bar">
+  <span class="tip-icon">💡</span>
+  Si es la primera vez, continúe a <a href="instalacion.html">Primeros pasos → Instalación</a>.
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

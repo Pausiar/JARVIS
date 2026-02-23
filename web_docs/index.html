@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>J.A.R.V.I.S. — Sistema de Ayuda</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══ TOPBAR ═══ -->
+<header class="topbar">
+  <button class="hamburger" aria-label="Menú">☰</button>
+  <div class="topbar-brand">
+    <div class="logo"></div>
+    <h1>J.A.R.V.I.S.</h1>
+    <span>Sistema de Ayuda</span>
+  </div>
+  <div class="topbar-search">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Buscar en la ayuda..." autocomplete="off">
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <nav class="topbar-nav">
+    <a href="index.html" class="active">🏠 Inicio</a>
+    <a href="indice.html">📑 Índice</a>
+  </nav>
+</header>
+
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sidebar">
+  <a href="index.html" class="sidebar-link-direct current">🏠 Inicio</a>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 📘 Introducción</div>
+    <ul class="sidebar-links">
+      <li><a href="introduccion.html">¿Qué es J.A.R.V.I.S.?</a></li>
+      <li><a href="introduccion.html#caracteristicas">Características</a></li>
+      <li><a href="introduccion.html#requisitos">Requisitos del sistema</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🚀 Primeros pasos</div>
+    <ul class="sidebar-links">
+      <li><a href="instalacion.html">Instalación</a></li>
+      <li><a href="interfaz.html">Primera ejecución</a></li>
+      <li><a href="interfaz.html#configuracion-inicial">Configuración inicial</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> ⚙️ Funciones principales</div>
+    <ul class="sidebar-links">
+      <li><a href="comandos.html">Catálogo de comandos</a></li>
+      <li><a href="comandos.html#sistema">Control del sistema</a></li>
+      <li><a href="comandos.html#ventanas">Ventanas y pestañas</a></li>
+      <li><a href="comandos.html#web">Navegación web</a></li>
+      <li><a href="comandos.html#archivos">Gestión de archivos</a></li>
+      <li><a href="comandos.html#documentos">Documentos</a></li>
+      <li><a href="comandos.html#automatizacion">Automatización</a></li>
+      <li><a href="comandos.html#multimedia">Multimedia</a></li>
+      <li><a href="comandos.html#email">Email</a></li>
+      <li><a href="ocr.html">Interacción visual (OCR)</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🔧 Configuración</div>
+    <ul class="sidebar-links">
+      <li><a href="configuracion.html">Archivo config.py</a></li>
+      <li><a href="configuracion.html#modo">Modo local vs. cloud</a></li>
+      <li><a href="configuracion.html#apikey">API Keys</a></li>
+      <li><a href="configuracion.html#plugins">Plugins</a></li>
+      <li><a href="configuracion.html#memoria">Memoria y aprendizaje</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> ❌ Resolución de problemas</div>
+    <ul class="sidebar-links">
+      <li><a href="problemas.html#ollama">Ollama no disponible</a></li>
+      <li><a href="problemas.html#apps">No abre aplicaciones</a></li>
+      <li><a href="problemas.html#voz">Voz y micrófono</a></li>
+      <li><a href="problemas.html#ocr">OCR / Clic incorrecto</a></li>
+      <li><a href="problemas.html#faq">Preguntas frecuentes</a></li>
+    </ul>
+  </div>
+
+  <a href="indice.html" class="sidebar-link-direct">📑 Índice alfabético</a>
+</aside>
+
+<!-- ═══ MAIN CONTENT ═══ -->
+<main class="main">
+
+  <!-- Hero -->
+  <div class="hero">
+    <h1>🤖 J.A.R.V.I.S.</h1>
+    <p class="subtitle">Just A Rather Very Intelligent System — Sistema de Ayuda</p>
+    <a href="instalacion.html" class="cta-btn">🚀 Comenzar la instalación</a>
+  </div>
+
+  <!-- Intro -->
+  <p>Bienvenido al sistema de ayuda de <strong>J.A.R.V.I.S.</strong>, su asistente de escritorio con inteligencia artificial para Windows 10/11. Funciona con modelos de IA tanto <strong>locales</strong> (Ollama) como en la <strong>nube</strong> (GitHub Models con GPT-4o-mini, Google Gemini), y es capaz de realizar tareas complejas de forma autónoma: lee la pantalla, planifica pasos y ejecuta acciones sin intervención del usuario.</p>
+
+  <!-- Quick start -->
+  <h2>⚡ Inicio rápido</h2>
+
+  <div class="step">
+    <div class="step-number">1</div>
+    <div class="step-content">
+      <h4>Instale los requisitos</h4>
+      <p><a href="https://www.python.org/downloads/">Python 3.11+</a>, <a href="https://ollama.com/download">Ollama</a> y <a href="https://git-scm.com/download/win">Git</a>.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">2</div>
+    <div class="step-content">
+      <h4>Clone e instale</h4>
+      <pre><code>git clone https://github.com/Pausiar/JARVIS.git
+cd JARVIS
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt</code></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">3</div>
+    <div class="step-content">
+      <h4>Descargue el modelo de IA</h4>
+      <pre><code>ollama serve          # en una terminal
+ollama pull mistral   # en otra (~4.4 GB)</code></pre>
+      <p>O use <a href="configuracion.html#modo">modo cloud</a> para evitar descargas.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">4</div>
+    <div class="step-content">
+      <h4>Ejecute JARVIS</h4>
+      <pre><code>python main.py</code></pre>
+      <p>Se abrirá la ventana HUD. ¡Listo! → <a href="interfaz.html">Ver la interfaz</a></p>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <h2>🧩 ¿Qué puede hacer J.A.R.V.I.S.?</h2>
+
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="fc-icon">🧠</div>
+      <div class="fc-title">IA dual: Local + Cloud</div>
+      <div class="fc-desc">Usa Ollama (local) o APIs cloud gratuitas: <strong>GitHub Models</strong> (GPT-4o-mini, 20K req/día) y <strong>Google Gemini</strong> (Gemini 2.0 Flash). Sin coste.</div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">👁️</div>
+      <div class="fc-title">Visión OCR</div>
+      <div class="fc-desc">Lee la pantalla, hace clic en texto, interactúa con cualquier app.</div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">⚙️</div>
+      <div class="fc-title">Control del sistema</div>
+      <div class="fc-desc">Apps, volumen, brillo, ventanas, portapapeles, capturas de pantalla.</div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">📄</div>
+      <div class="fc-title">Documentos</div>
+      <div class="fc-desc">Lee PDF, Word, Excel. Resuelve ejercicios y escribe las soluciones.</div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">🎙️</div>
+      <div class="fc-title">Voz natural</div>
+      <div class="fc-desc">Entrada de voz (Whisper) y síntesis TTS (Piper) en español.</div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">⏰</div>
+      <div class="fc-title">Automatización</div>
+      <div class="fc-desc">Recordatorios, timers, rutinas programadas, aprendizaje de procedimientos.</div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">🤖</div>
+      <div class="fc-title">Agente autónomo</div>
+      <div class="fc-desc">Va más allá de comandos simples: planifica, ejecuta y verifica tareas complejas de varios pasos de forma independiente.</div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">📝</div>
+      <div class="fc-title">Resuelve ejercicios</div>
+      <div class="fc-desc">Lee un PDF con ejercicios, los resuelve con la IA y escribe las soluciones en Word, Google Docs u otra app.</div>
+    </div>
+  </div>
+
+  <div class="callout callout-info">
+    <div class="callout-title">📌 Temas populares</div>
+    <ul>
+      <li><a href="comandos.html">Catálogo completo de comandos</a></li>
+      <li><a href="ocr.html">Cómo funciona la visión OCR</a></li>
+      <li><a href="comandos.html#documentos">Resolver ejercicios de un PDF</a></li>
+      <li><a href="configuracion.html#modo">Configurar modo cloud (sin GPU)</a></li>
+      <li><a href="problemas.html">Resolver problemas comunes</a></li>
+    </ul>
+  </div>
+
+  <!-- Nav -->
+  <div class="page-nav">
+    <span></span>
+    <a href="introduccion.html">
+      <span><span class="nav-label">Siguiente</span><span class="nav-title">Introducción →</span></span>
+    </a>
+  </div>
+
+</main>
+
+<div class="tip-bar">
+  <span class="tip-icon">💡</span>
+  ¿Primera vez? Vaya a <a href="instalacion.html">Primeros pasos → Instalación</a> para comenzar.
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

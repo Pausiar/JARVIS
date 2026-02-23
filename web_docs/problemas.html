@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resolución de Problemas — J.A.R.V.I.S.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══ TOPBAR ═══ -->
+<header class="topbar">
+  <button class="hamburger" aria-label="Menú">☰</button>
+  <div class="topbar-brand">
+    <div class="logo"></div>
+    <h1>J.A.R.V.I.S.</h1>
+    <span>Sistema de Ayuda</span>
+  </div>
+  <div class="topbar-search">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Buscar en la ayuda..." autocomplete="off">
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <nav class="topbar-nav">
+    <a href="index.html">🏠 Inicio</a>
+    <a href="indice.html">📑 Índice</a>
+  </nav>
+</header>
+
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sidebar">
+  <a href="index.html" class="sidebar-link-direct">🏠 Inicio</a>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 📘 Introducción</div>
+    <ul class="sidebar-links">
+      <li><a href="introduccion.html">¿Qué es J.A.R.V.I.S.?</a></li>
+      <li><a href="introduccion.html#caracteristicas">Características</a></li>
+      <li><a href="introduccion.html#requisitos">Requisitos del sistema</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🚀 Primeros pasos</div>
+    <ul class="sidebar-links">
+      <li><a href="instalacion.html">Instalación</a></li>
+      <li><a href="interfaz.html">Primera ejecución</a></li>
+      <li><a href="interfaz.html#configuracion-inicial">Configuración inicial</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> ⚙️ Funciones principales</div>
+    <ul class="sidebar-links">
+      <li><a href="comandos.html">Catálogo de comandos</a></li>
+      <li><a href="comandos.html#sistema">Control del sistema</a></li>
+      <li><a href="comandos.html#ventanas">Ventanas y pestañas</a></li>
+      <li><a href="comandos.html#web">Navegación web</a></li>
+      <li><a href="comandos.html#archivos">Gestión de archivos</a></li>
+      <li><a href="comandos.html#documentos">Documentos</a></li>
+      <li><a href="comandos.html#automatizacion">Automatización</a></li>
+      <li><a href="comandos.html#multimedia">Multimedia</a></li>
+      <li><a href="comandos.html#email">Email</a></li>
+      <li><a href="ocr.html">Interacción visual (OCR)</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🔧 Configuración</div>
+    <ul class="sidebar-links">
+      <li><a href="configuracion.html">Archivo config.py</a></li>
+      <li><a href="configuracion.html#modo">Modo local vs. cloud</a></li>
+      <li><a href="configuracion.html#apikey">API Keys</a></li>
+      <li><a href="configuracion.html#plugins">Plugins</a></li>
+      <li><a href="configuracion.html#memoria">Memoria y aprendizaje</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section open">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> ❌ Resolución de problemas</div>
+    <ul class="sidebar-links">
+      <li><a href="problemas.html#ollama" class="current">Ollama no disponible</a></li>
+      <li><a href="problemas.html#apps">No abre aplicaciones</a></li>
+      <li><a href="problemas.html#voz">Voz y micrófono</a></li>
+      <li><a href="problemas.html#ocr">OCR / Clic incorrecto</a></li>
+      <li><a href="problemas.html#faq">Preguntas frecuentes</a></li>
+    </ul>
+  </div>
+
+  <a href="indice.html" class="sidebar-link-direct">📑 Índice alfabético</a>
+</aside>
+
+<!-- ═══ MAIN CONTENT ═══ -->
+<main class="main">
+
+  <div class="breadcrumb">
+    <a href="index.html">Inicio</a> <span class="sep">›</span> Resolución de problemas
+  </div>
+
+  <h1>❌ Resolución de Problemas</h1>
+  <p>Guía para diagnosticar y resolver los problemas más comunes de JARVIS. Si tu problema no aparece aquí, revisa <code>data/logs/jarvis.log</code> para ver el error exacto.</p>
+
+
+  <!-- ── Ollama ── -->
+  <h2 id="ollama">🧠 Ollama no disponible / IA no responde</h2>
+
+  <div class="callout info">
+    <strong>¿Usas modo cloud?</strong> Si tienes <code>BRAIN_MODE = "cloud"</code> (la configuración por defecto), no necesitas Ollama en absoluto. Pasa directamente a la sección de <a href="#cloud-errors">errores de API cloud</a>.
+  </div>
+
+  <table class="key-table">
+    <thead>
+      <tr><th>Síntoma</th><th>Causa probable</th><th>Solución</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>«No se puede conectar con Ollama»</td>
+        <td>Ollama no está instalado o no está corriendo</td>
+        <td>
+          1. Instala Ollama desde <a href="https://ollama.com" target="_blank">ollama.com</a><br>
+          2. Ejecuta <code>ollama serve</code> en un terminal<br>
+          3. Comprueba que <code>http://localhost:11434</code> responde en el navegador
+        </td>
+      </tr>
+      <tr>
+        <td>«Modelo no encontrado»</td>
+        <td>El modelo no está descargado</td>
+        <td>Ejecuta: <code>ollama pull mistral</code> (o el modelo configurado en <code>OLLAMA_MODEL</code>)</td>
+      </tr>
+      <tr>
+        <td>Respuestas extremadamente lentas</td>
+        <td>Hardware insuficiente para el modelo</td>
+        <td>
+          Usa un modelo más ligero (<code>phi3</code>) o cambia a modo cloud:<br>
+          <code>BRAIN_MODE = "cloud"</code>
+        </td>
+      </tr>
+      <tr>
+        <td>Error de memoria / OOM</td>
+        <td>No hay suficiente RAM para cargar el modelo</td>
+        <td>
+          Cierra aplicaciones pesadas o usa modo cloud. Mistral requiere ≈8 GB RAM libres.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+
+  <!-- ── Cloud errors ── -->
+  <h2 id="cloud-errors">☁️ Errores de APIs Cloud</h2>
+
+  <table class="key-table">
+    <thead>
+      <tr><th>Síntoma</th><th>Causa probable</th><th>Solución</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>«API key no configurada»</td>
+        <td>No has introducido tu clave</td>
+        <td>
+          Di a JARVIS: <code>"configura api key github TU_TOKEN"</code><br>
+          o: <code>"configura api key gemini TU_KEY"</code><br>
+          Ver <a href="configuracion.html#apikey">Configurar API Keys</a>
+        </td>
+      </tr>
+      <tr>
+        <td>Error 401 / Unauthorized</td>
+        <td>API key inválida o expirada</td>
+        <td>Genera una nueva key y configúrala de nuevo</td>
+      </tr>
+      <tr>
+        <td>Error 429 / Rate limit</td>
+        <td>Has excedido el límite diario</td>
+        <td>
+          GitHub Models: 20K req/día. Espera a mañana o cambia a Gemini:<br>
+          <code>"usa el proveedor gemini"</code>
+        </td>
+      </tr>
+      <tr>
+        <td>Error de conexión / Timeout</td>
+        <td>Sin internet o el servicio está caído</td>
+        <td>Comprueba tu conexión. Si persiste, cambia de proveedor o usa modo local</td>
+      </tr>
+    </tbody>
+  </table>
+
+
+  <!-- ── Apps ── -->
+  <h2 id="apps">📂 No abre aplicaciones</h2>
+
+  <table class="key-table">
+    <thead>
+      <tr><th>Síntoma</th><th>Causa probable</th><th>Solución</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>«No se encontró la aplicación X»</td>
+        <td>La app no está instalada o el nombre no coincide</td>
+        <td>
+          Prueba con el nombre exacto: <em>"abre Google Chrome"</em> en vez de <em>"abre chrome"</em>.
+          También puedes usar: <em>"abre la aplicación C:\ruta\al\programa.exe"</em>
+        </td>
+      </tr>
+      <tr>
+        <td>Se abre la app pero no la encuentra después</td>
+        <td>El título de la ventana es diferente al nombre de la app</td>
+        <td>
+          JARVIS busca ventanas por título. Si Chrome se llama «Inicio — Google Chrome», di <em>"enfoca google chrome"</em> o <em>"enfoca Chrome"</em>.
+        </td>
+      </tr>
+      <tr>
+        <td>Error de permisos al abrir</td>
+        <td>La app requiere ejecutar como administrador</td>
+        <td>Ejecuta JARVIS como administrador (clic derecho → Ejecutar como admin en <code>JARVIS.bat</code>)</td>
+      </tr>
+    </tbody>
+  </table>
+
+
+  <!-- ── Voz ── -->
+  <h2 id="voz">🎙️ Voz y micrófono</h2>
+
+  <table class="key-table">
+    <thead>
+      <tr><th>Síntoma</th><th>Causa probable</th><th>Solución</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>No reconoce lo que digo</td>
+        <td>Modelo Whisper demasiado pequeño</td>
+        <td>
+          En <code>config.py</code> cambia <code>WHISPER_MODEL</code> de <code>"tiny"</code> a <code>"small"</code> o <code>"medium"</code>.
+          El modelo <code>"small"</code> ofrece el mejor equilibrio calidad/velocidad para español.
+        </td>
+      </tr>
+      <tr>
+        <td>Ctrl+Shift+J no activa la grabación</td>
+        <td>El atajo está en uso por otra aplicación</td>
+        <td>Cambia <code>HOTKEY_ACTIVATE</code> a otra combinación, por ejemplo <code>"ctrl+alt+j"</code></td>
+      </tr>
+      <tr>
+        <td>JARVIS no habla / no se oye</td>
+        <td>TTS desactivado o modelo Piper no descargado</td>
+        <td>
+          1. Verifica <code>TTS_ENABLED = True</code> en <code>config.py</code><br>
+          2. El modelo Piper se descarga automáticamente en <code>data/piper_model/</code>. Si falta, ejecuta <code>python setup.py</code> de nuevo.
+        </td>
+      </tr>
+      <tr>
+        <td>Error «No se detecta micrófono»</td>
+        <td>Micrófono no conectado o sin permisos</td>
+        <td>
+          1. Verifica que el micrófono funciona en la configuración de Windows<br>
+          2. Comprueba que Python tiene permisos de micrófono (Configuración → Privacidad → Micrófono)
+        </td>
+      </tr>
+      <tr>
+        <td>Transcripciones incorrectas (confunde palabras)</td>
+        <td>Idioma auto-detectado incorrecto</td>
+        <td>
+          Asegúrate de tener <code>WHISPER_LANGUAGE = "es"</code> en <code>config.py</code>.
+          El <code>WHISPER_INITIAL_PROMPT</code> también ayuda a mejorar la transcripción dando vocabulario de contexto.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+
+  <!-- ── OCR ── -->
+  <h2 id="ocr">👁️ OCR / Clic incorrecto</h2>
+
+  <table class="key-table">
+    <thead>
+      <tr><th>Síntoma</th><th>Causa probable</th><th>Solución</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Hace clic en el lugar equivocado</td>
+        <td>Resolución de pantalla diferente a la esperada</td>
+        <td>
+          JARVIS usa 3 estrategias de clic en cascada: <strong>Ctrl+F</strong> → <strong>UI Automation</strong> → <strong>OCR</strong>.
+          Si Ctrl+F no funciona en la app, se usa OCR como fallback. Asegúrate de que el texto sea visible en pantalla.
+        </td>
+      </tr>
+      <tr>
+        <td>Hace clic simple donde debería hacer doble clic</td>
+        <td>El agente no detectó que era un icono/archivo</td>
+        <td>
+          JARVIS tiene <strong>auto-retry con doble clic</strong>: si detecta que un clic simple no cambió la pantalla, reintenta automáticamente con doble clic. Si persiste, di explícitamente: <em>"haz doble clic en X"</em>.
+        </td>
+      </tr>
+      <tr>
+        <td>«No encuentro el texto X en pantalla»</td>
+        <td>El texto no es visible o está parcialmente oculto</td>
+        <td>
+          Asegúrate de que la ventana objetivo esté maximizada y el texto sea completamente visible. Si el texto es largo, usa texto parcial: <em>"haz clic donde pone Actividad"</em> en vez del nombre completo.
+        </td>
+      </tr>
+      <tr>
+        <td>OCR no lee bien caracteres especiales</td>
+        <td>Fuente o contraste difícil para el OCR</td>
+        <td>
+          El motor OCR (Tesseract) funciona mejor con texto claro sobre fondo contrastante. En apps con temas oscuros puede haber errores. Intenta maximizar el contraste.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+
+  <!-- ── FAQ ── -->
+  <h2 id="faq">❓ Preguntas frecuentes</h2>
+
+  <details class="faq-item">
+    <summary>¿JARVIS funciona sin internet?</summary>
+    <p>Sí, en <strong>modo local</strong> (<code>BRAIN_MODE = "local"</code>) todo se ejecuta en tu PC con Ollama. La voz (Whisper + Piper), el OCR y los comandos del sistema también funcionan offline. Solo el modo cloud y la búsqueda web requieren internet.</p>
+  </details>
+
+  <details class="faq-item">
+    <summary>¿Es compatible con macOS o Linux?</summary>
+    <p>Actualmente JARVIS está diseñado para <strong>Windows 10/11</strong>. Muchas funciones (control de ventanas, PowerShell, UI Automation) dependen de APIs de Windows. Una versión multiplataforma está prevista para el futuro.</p>
+  </details>
+
+  <details class="faq-item">
+    <summary>¿Puedo cambiar el modelo de IA?</summary>
+    <p>Sí. En modo local, cambia <code>OLLAMA_MODEL</code> a cualquier modelo compatible con Ollama (<code>mistral</code>, <code>llama3</code>, <code>phi3</code>, etc.). En modo cloud, puedes cambiar entre GitHub Models (GPT-4o-mini) y Gemini (2.0 Flash) desde el propio JARVIS con un simple comando.</p>
+  </details>
+
+  <details class="faq-item">
+    <summary>¿Las API keys son de pago?</summary>
+    <p><strong>No</strong>. Tanto GitHub Models (GPT-4o-mini, 20K solicitudes/día) como Google Gemini (2.0 Flash) ofrecen acceso gratuito con límites más que suficientes para uso personal.</p>
+  </details>
+
+  <details class="faq-item">
+    <summary>¿Puedo desactivar la voz?</summary>
+    <p>Sí. Pon <code>TTS_ENABLED = False</code> en <code>config.py</code>. JARVIS seguirá respondiendo por texto en la interfaz HUD pero no hablará en voz alta.</p>
+  </details>
+
+  <details class="faq-item">
+    <summary>¿JARVIS puede aprender cosas nuevas?</summary>
+    <p>Sí. Tiene un <strong>motor de aprendizaje</strong> que puede investigar cómo hacer tareas nuevas, generar código, probarlo y guardar las habilidades que funcionan. También guarda procedimientos autónomos exitosos para reutilizarlos. Di <em>"aprende a hacer X"</em> para activar la investigación.</p>
+  </details>
+
+  <details class="faq-item">
+    <summary>¿Cómo actualizo JARVIS?</summary>
+    <p>Si lo tienes clonado con Git: <code>git pull</code> y luego <code>pip install -r requirements.txt</code>. Si lo descargaste como ZIP, descarga la versión nueva y copia tu <code>data/config.json</code> para conservar tu configuración.</p>
+  </details>
+
+  <details class="faq-item">
+    <summary>¿Puedo ejecutar código arbitrario?</summary>
+    <p>Sí, JARVIS incluye un sandbox de código Python. Di <em>"ejecuta este código: print('hola')"</em>. El sandbox tiene un timeout de 30 segundos y límite de memoria de 256 MB (<code>CODE_EXEC_TIMEOUT</code> / <code>CODE_EXEC_MAX_MEMORY</code>) para evitar que código malicioso afecte al sistema.</p>
+  </details>
+
+
+  <!-- ═══ NAV ═══ -->
+  <div class="page-nav">
+    <a href="configuracion.html" class="nav-prev">← Configuración</a>
+    <a href="indice.html" class="nav-next">Índice alfabético →</a>
+  </div>
+
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>

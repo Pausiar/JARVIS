@@ -41,6 +41,7 @@ class MessageWorker(QObject):
     """Worker que procesa mensajes en un hilo separado."""
     finished = Signal(str)
     error = Signal(str)
+    token_received = Signal(str)  # Para streaming token-by-token
 
     def __init__(self, orchestrator, message):
         super().__init__()

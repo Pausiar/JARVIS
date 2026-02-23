@@ -13,6 +13,15 @@ import tempfile
 import re
 import os
 from pathlib import Path
+
+# ─── Helper: ocultar consolas en subprocess (.pyw) ────────
+_STARTUPINFO = None
+_CREATION_FLAGS = 0
+if os.name == 'nt':
+    _STARTUPINFO = subprocess.STARTUPINFO()
+    _STARTUPINFO.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    _STARTUPINFO.wShowWindow = 0
+    _CREATION_FLAGS = subprocess.CREATE_NO_WINDOW
 from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -502,15 +511,17 @@ class LearningEngine:
             subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-EncodedCommand", b64],
                 capture_output=True, text=True, timeout=5,
-                input=None
+                input=None,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             # El EncodedCommand ejecuta el texto como script, necesitamos Set-Clipboard
-            clip_script = f'Set-Clipboard -Value ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("{base64.b64encode(prompt_text.encode("utf-8")).decode("ascii")}")))'
+            clip_script = f'Set-Clipboard -Value ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("{base64.b64encode(prompt_text.encode("utf-8")).decode("ascii")}")))'  
             clip_raw = clip_script.encode('utf-16-le')
             clip_b64 = base64.b64encode(clip_raw).decode('ascii')
             subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-EncodedCommand", clip_b64],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=5,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             logger.info("Prompt copiado al portapapeles")
         except Exception as e:
@@ -560,7 +571,8 @@ class LearningEngine:
         try:
             clip_result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command", "Get-Clipboard"],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=5,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             chatgpt_response = clip_result.stdout.strip()
             logger.info(f"Respuesta de ChatGPT: {len(chatgpt_response)} chars")
@@ -739,6 +751,7 @@ class LearningEngine:
                 capture_output=True, text=True,
                 timeout=timeout,
                 cwd=str(DATA_DIR),
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
 
             output = result.stdout.strip()

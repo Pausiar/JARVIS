@@ -6,6 +6,7 @@ Generación y ejecución segura de código Python.
 import subprocess
 import tempfile
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -15,6 +16,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import CODE_EXEC_TIMEOUT, CODE_EXEC_MAX_MEMORY
 
 logger = logging.getLogger("jarvis.code_executor")
+
+# ─── Helper: ocultar consolas en subprocess (.pyw) ────────
+_STARTUPINFO = None
+_CREATION_FLAGS = 0
+if os.name == 'nt':
+    _STARTUPINFO = subprocess.STARTUPINFO()
+    _STARTUPINFO.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    _STARTUPINFO.wShowWindow = 0
+    _CREATION_FLAGS = subprocess.CREATE_NO_WINDOW
 
 
 class CodeExecutor:
@@ -65,6 +75,7 @@ class CodeExecutor:
                 timeout=timeout,
                 cwd=str(self.output_dir),
                 env=self._safe_env(),
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
 
             output = ""

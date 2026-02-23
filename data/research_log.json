@@ -1,0 +1,31 @@
+[
+  {
+    "timestamp": "2026-02-16T11:50:52.122354",
+    "request": "ahora mira las tareas que me faltan por entregar en aules",
+    "failure_context": "No he podido procesar la petición ahora mismo, señor. Los comandos directos (abrir apps, navegar, buscar) funcionan sin límite. Para preguntas complejas, espere un minuto e inténtelo de nuevo.",
+    "steps": [
+      {
+        "step": "llm_research",
+        "response_length": 192
+      }
+    ],
+    "result": "no_code_found"
+  },
+  {
+    "timestamp": "2026-02-17T12:40:05.994270",
+    "request": "descarga el archivo pdf",
+    "failure_context": "Me temo que no he podido completar esa tarea, señor. No tengo la capacidad para descargar archivos directamente. Sin embargo, puedo guiarle sobre cómo hacerlo. ¿Le gustaría que le explique cómo descargar el PDF?",
+    "steps": [
+      {
+        "step": "llm_research",
+        "response_length": 1146
+      },
+      {
+        "step": "test_code_1",
+        "success": false,
+        "output": "Error al descargar el archivo: Invalid URL 'URL_DEL_PDF': No scheme supplied. Perhaps you meant https://URL_DEL_PDF?"
+      }
+    ],
+    "result": "code_failed"
+  }
+]

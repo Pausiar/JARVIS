@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Catálogo de comandos — J.A.R.V.I.S. Ayuda</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="hamburger" aria-label="Menú">☰</button>
+  <div class="topbar-brand"><div class="logo"></div><h1>J.A.R.V.I.S.</h1><span>Sistema de Ayuda</span></div>
+  <div class="topbar-search">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Buscar en la ayuda..." autocomplete="off">
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <nav class="topbar-nav"><a href="index.html">🏠 Inicio</a><a href="indice.html">📑 Índice</a></nav>
+</header>
+
+<aside class="sidebar">
+  <a href="index.html" class="sidebar-link-direct">🏠 Inicio</a>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 📘 Introducción</div>
+    <ul class="sidebar-links"><li><a href="introduccion.html">¿Qué es J.A.R.V.I.S.?</a></li></ul>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🚀 Primeros pasos</div>
+    <ul class="sidebar-links">
+      <li><a href="instalacion.html">Instalación</a></li>
+      <li><a href="interfaz.html">Primera ejecución</a></li>
+    </ul>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title open"><span class="arrow">▶</span> ⚙️ Funciones principales</div>
+    <ul class="sidebar-links">
+      <li><a href="comandos.html" class="current">Catálogo de comandos</a></li>
+      <li><a href="comandos.html#sistema">Control del sistema</a></li>
+      <li><a href="comandos.html#ventanas">Ventanas y pestañas</a></li>
+      <li><a href="comandos.html#web">Navegación web</a></li>
+      <li><a href="comandos.html#archivos">Archivos</a></li>
+      <li><a href="comandos.html#documentos">Documentos</a></li>
+      <li><a href="comandos.html#automatizacion">Automatización</a></li>
+      <li><a href="comandos.html#multimedia">Multimedia</a></li>
+      <li><a href="comandos.html#email">Email</a></li>
+      <li><a href="ocr.html">Interacción visual (OCR)</a></li>
+    </ul>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🔧 Configuración</div>
+    <ul class="sidebar-links"><li><a href="configuracion.html">config.py</a></li></ul>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> ❌ Problemas</div>
+    <ul class="sidebar-links"><li><a href="problemas.html">Problemas comunes</a></li></ul>
+  </div>
+  <a href="indice.html" class="sidebar-link-direct">📑 Índice alfabético</a>
+</aside>
+
+<main class="main">
+
+  <div class="breadcrumb">
+    <a href="index.html">Inicio</a> <span class="sep">›</span>
+    <span class="current-crumb">Funciones principales — Catálogo de comandos</span>
+  </div>
+
+  <h1>⚙️ Catálogo de comandos</h1>
+
+  <p>A continuación se listan todos los comandos que JARVIS reconoce, agrupados por categoría. Puede escribirlos en la barra de texto o decirlos por voz.</p>
+
+  <div class="callout info">
+    <strong>Más allá de comandos simples:</strong> JARVIS no se limita a ejecutar los comandos de esta lista. Gracias a su IA cloud (<strong>GPT-4o-mini</strong> / <strong>Gemini 2.0 Flash</strong>) y su <a href="ocr.html#agente">agente autónomo</a>, puede entender peticiones complejas en lenguaje natural y realizar tareas de múltiples pasos — como resolver ejercicios de un PDF, navegar por webs, subir archivos a Moodle o enviar mensajes por WhatsApp. Los comandos de esta tabla son solo las funciones directas más comunes.
+  </div>
+
+  <div class="callout callout-info">
+    <div class="callout-title">💡 Lenguaje natural</div>
+    <p>No necesita memorizar comandos exactos. JARVIS entiende lenguaje natural: «sube el volumen un poco», «ponme música», «qué tiempo hace» — todo se interpreta automáticamente.</p>
+  </div>
+
+  <!-- ─── Sistema ─── -->
+  <h2 id="sistema">🖥️ Control del sistema</h2>
+  <table>
+    <thead><tr><th>Comando</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td><code>Abre Chrome</code></td><td>Abre Google Chrome (funciona con cualquier app)</td></tr>
+      <tr><td><code>Cierra Discord</code></td><td>Cierra la aplicación Discord</td></tr>
+      <tr><td><code>Sube el volumen</code></td><td>+10% de volumen del sistema</td></tr>
+      <tr><td><code>Pon el volumen al 50</code></td><td>Volumen exacto al 50%</td></tr>
+      <tr><td><code>Silencia</code></td><td>Mute / unmute</td></tr>
+      <tr><td><code>Sube el brillo</code></td><td>+10% de brillo de pantalla</td></tr>
+      <tr><td><code>Captura de pantalla</code></td><td>Screenshot guardado en el escritorio</td></tr>
+      <tr><td><code>¿Qué hora es?</code></td><td>Hora y fecha actuales</td></tr>
+      <tr><td><code>Info del sistema</code></td><td>CPU, RAM, disco, batería</td></tr>
+      <tr><td><code>Apaga el PC</code></td><td>Apagar el ordenador</td></tr>
+      <tr><td><code>Reinicia</code></td><td>Reiniciar Windows</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ─── Ventanas ─── -->
+  <h2 id="ventanas">🪟 Ventanas y pestañas</h2>
+  <table>
+    <thead><tr><th>Comando</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td><code>Enfoca la ventana de Discord</code></td><td>Trae Discord al primer plano</td></tr>
+      <tr><td><code>Cambia a Chrome</code></td><td>Foco a Chrome</td></tr>
+      <tr><td><code>Nueva pestaña</code></td><td>Ctrl+T en el navegador</td></tr>
+      <tr><td><code>Cierra la pestaña</code></td><td>Ctrl+W</td></tr>
+      <tr><td><code>Cambia de pestaña</code></td><td>Ctrl+Tab</td></tr>
+      <tr><td><code>Minimiza la ventana</code></td><td>Minimizar ventana activa</td></tr>
+      <tr><td><code>Maximiza</code></td><td>Maximizar ventana activa</td></tr>
+      <tr><td><code>Ajusta la ventana a la izquierda</code></td><td>Snap left (media pantalla)</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ─── Web ─── -->
+  <h2 id="web">🌐 Navegación web</h2>
+  <table>
+    <thead><tr><th>Comando</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td><code>Busca recetas de pasta</code></td><td>Abre Google con la búsqueda</td></tr>
+      <tr><td><code>Busca noticias sobre IA</code></td><td>Búsqueda en Google</td></tr>
+    </tbody>
+  </table>
+  <p>Cualquier frase que comience con «busca» se convierte en una búsqueda de Google real en su navegador.</p>
+
+  <!-- ─── Archivos ─── -->
+  <h2 id="archivos">📁 Gestión de archivos</h2>
+  <table>
+    <thead><tr><th>Comando</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td><code>Abre el archivo C:\docs\nota.txt</code></td><td>Abre el archivo con la app predeterminada</td></tr>
+      <tr><td><code>Crea un archivo prueba.txt</code></td><td>Crea un archivo nuevo</td></tr>
+      <tr><td><code>Mueve archivo.pdf a C:\Documentos</code></td><td>Mueve el archivo</td></tr>
+      <tr><td><code>Busca archivos PDF en el escritorio</code></td><td>Busca archivos por extensión</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ─── Documentos ─── -->
+  <h2 id="documentos">📄 Documentos (PDF, Word, Excel…)</h2>
+  <table>
+    <thead><tr><th>Comando</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td><code>Lee el PDF C:\docs\resumen.pdf</code></td><td>Lee y devuelve el contenido</td></tr>
+      <tr><td><code>Resume el documento C:\docs\trabajo.docx</code></td><td>Resumen con IA</td></tr>
+      <tr><td><code>Resuelve los ejercicios del PDF C:\mates.pdf</code></td><td>Los resuelve con IA y muestra las soluciones</td></tr>
+      <tr><td><code>Haz los ejercicios del PDF examen.pdf en Word</code></td><td>Resuelve y escribe automáticamente en Word</td></tr>
+      <tr><td><code>Contesta las preguntas del PDF test.pdf en Google Docs</code></td><td>Escribe las soluciones en Google Docs</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-info">
+    <div class="callout-title">💡 Flujo multi-aplicación</div>
+    <p>JARVIS puede leer un ejercicio en una app (PDF, navegador) y escribir la solución en otra (Word, Google Docs, IntelliJ…). Usa la <a href="ocr.html">visión OCR</a> para leer y los controles del sistema para escribir.</p>
+  </div>
+
+  <!-- ─── Portapapeles ─── -->
+  <h2 id="portapapeles">📋 Portapapeles</h2>
+  <table>
+    <thead><tr><th>Comando</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td><code>Lee el portapapeles</code></td><td>Muestra el contenido actual</td></tr>
+      <tr><td><code>Copia al portapapeles hola mundo</code></td><td>Copia el texto especificado</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ─── Automatización ─── -->
+  <h2 id="automatizacion">⏰ Automatización</h2>
+  <table>
+    <thead><tr><th>Comando</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td><code>Recuérdame en 30 minutos comprar pan</code></td><td>Recordatorio con notificación</td></tr>
+      <tr><td><code>Pon un timer de 5 minutos</code></td><td>Temporizador con alerta</td></tr>
+      <tr><td><code>Crea evento reunión mañana a las 15</code></td><td>Evento en el calendario local</td></tr>
+      <tr><td><code>Eventos de hoy</code></td><td>Lista los eventos del día</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ─── Multimedia ─── -->
+  <h2 id="multimedia">🎵 Multimedia</h2>
+  <table>
+    <thead><tr><th>Comando</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td><code>Play</code> / <code>Pausa</code></td><td>Reproducir / pausar media</td></tr>
+      <tr><td><code>Siguiente canción</code></td><td>Next track</td></tr>
+      <tr><td><code>Canción anterior</code></td><td>Previous track</td></tr>
+      <tr><td><code>¿Qué canción suena?</code></td><td>Muestra el título de Spotify</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ─── Email ─── -->
+  <h2 id="email">📧 Email</h2>
+  <table>
+    <thead><tr><th>Comando</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td><code>Envía un email a user@mail.com diciendo…</code></td><td>Envía un correo vía SMTP</td></tr>
+    </tbody>
+  </table>
+  <p>Requiere configurar las credenciales SMTP en <code>data/config.json</code>. Vea <a href="configuracion.html">Configuración</a>.</p>
+
+  <!-- ─── Conversación ─── -->
+  <h2 id="conversacion">🗣️ Conversación con la IA</h2>
+  <p>Cualquier mensaje que no sea un comando directo se envía al modelo de IA para una respuesta conversacional:</p>
+  <ul>
+    <li><code>¿Qué opinas sobre la inteligencia artificial?</code></li>
+    <li><code>Cuéntame un chiste</code></li>
+    <li><code>Explícame la teoría de la relatividad</code></li>
+    <li><code>Recomiéndame una película</code></li>
+  </ul>
+  <p>JARVIS responde en español, con tono formal y humor sutil, llamando al usuario «señor».</p>
+
+  <div class="page-nav">
+    <a href="interfaz.html"><span><span class="nav-label">Anterior</span><span class="nav-title">← Primera ejecución</span></span></a>
+    <a href="ocr.html"><span><span class="nav-label">Siguiente</span><span class="nav-title">Interacción visual (OCR) →</span></span></a>
+  </div>
+
+</main>
+
+<div class="tip-bar">
+  <span class="tip-icon">💡</span>
+  JARVIS entiende lenguaje natural. No necesita memorizar comandos exactos.
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

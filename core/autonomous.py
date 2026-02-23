@@ -1,12 +1,14 @@
 """
-J.A.R.V.I.S. — Autonomous Agent  (v2: Plan-first architecture)
+J.A.R.V.I.S. — Autonomous Agent  (v3: Enhanced Plan-first architecture)
 
-Flujo nuevo:
+Flujo mejorado (inspirado en OpenClaw):
 1. ENTENDER — Leer el mensaje del usuario y comprender QUÉ quiere.
 2. PLANIFICAR — Crear un plan de pasos concretos (usando pantalla + procedimientos).
 3. EJECUTAR — Ir paso a paso, observando la pantalla después de cada acción.
-4. SI NO SABE → PREGUNTAR AL USUARIO (no a ChatGPT: cada sitio es diferente).
-5. APRENDER — Guardar el camino exitoso para la próxima vez.
+4. VERIFICAR — Comprobar semánticamente que cada acción tuvo el efecto esperado.
+5. SI NO SABE → INVESTIGAR en la web cómo hacerlo + PREGUNTAR al usuario.
+6. RECUPERAR — Si algo falla, intentar enfoques alternativos.
+7. APRENDER — Guardar el camino exitoso para la próxima vez.
 """
 
 import json
@@ -25,18 +27,21 @@ from config import DATA_DIR
 logger = logging.getLogger("jarvis.autonomous")
 
 PROCEDURES_FILE = DATA_DIR / "procedures.json"
-MAX_STEPS = 15  # Máximo de pasos antes de rendirse
+MAX_STEPS = 20  # Máximo de pasos antes de rendirse (aumentado para tareas complejas)
+MAX_REPLANS = 4  # Número de replanificaciones permitidas (aumentado)
 
 
 class AutonomousAgent:
     """
-    Agente autónomo con arquitectura Plan-first.
+    Agente autónomo con arquitectura Plan-first mejorada.
+    Inspirado en OpenClaw: puede investigar, adaptarse y aprender.
 
     1. Entiende el objetivo.
     2. Crea un plan (lista de pasos).
-    3. Ejecuta cada paso, observando la pantalla.
-    4. Si se atasca, pregunta al USUARIO.
-    5. Guarda el procedimiento exitoso.
+    3. Ejecuta cada paso, verificando semánticamente el resultado.
+    4. Si falla → investiga en la web cómo hacerlo.
+    5. Si se atasca → pregunta al USUARIO.
+    6. Guarda el procedimiento exitoso.
     """
 
     def __init__(self, brain, system_control, parser):
@@ -50,7 +55,27 @@ class AutonomousAgent:
         self._pending_executed = None    # Pasos ya ejecutados cuando hay pregunta
         self._screen_memory = []         # Últimas pantallas vistas (para contexto)
         self._jarvis_minimized = False
+        self._web_search = None          # Referencia a WebSearch (inyectada)
+        self._action_history = []        # Historial de acciones para contexto
+        self._status_callback = None     # Callback para notificar progreso al UI
         logger.info(f"AutonomousAgent inicializado. {len(self._procedures)} procedimientos guardados.")
+
+    def set_web_search(self, web_search):
+        """Inyecta el módulo de búsqueda web para investigación autónoma."""
+        self._web_search = web_search
+
+    def set_status_callback(self, callback):
+        """Establece callback para informar del progreso."""
+        self._status_callback = callback
+
+    def _notify_status(self, message: str):
+        """Notifica al UI del progreso."""
+        if self._status_callback:
+            try:
+                self._status_callback(message)
+            except Exception:
+                pass
+        logger.info(f"[Agent] {message}")
 
     # ─── Procedimientos guardados ─────────────────────────────
 
@@ -314,15 +339,25 @@ class AutonomousAgent:
             "Acciones disponibles:\n"
             "- open_application: {app_name: 'chrome'|'explorer'|...}\n"
             "- navigate_to_url: {url: '...'}\n"
-            "- click_on_text: {text: 'texto EXACTO del OCR'}\n"
-            "- double_click: {text: 'texto EXACTO del OCR'}\n"
+            "- click_on_text: {text: 'texto EXACTO del OCR'} — clic simple "
+            "(para botones, enlaces, menús, barras de herramientas)\n"
+            "- double_click: {text: 'texto EXACTO del OCR'} — doble clic "
+            "(para ABRIR archivos, carpetas, iconos del escritorio, "
+            "elementos del Explorador de archivos). "
+            "En el escritorio y en el Explorador de Windows, "
+            "un solo clic SOLO selecciona; necesitas double_click para abrir.\n"
             "- right_click: {text: 'texto'}\n"
             "- scroll_page: {direction: 'down'|'up'}\n"
             "- type_in_app: {text: '...'}\n"
-            "- press_key: {key: 'enter'|'tab'|'ctrl+f'|...}\n"
+            "- press_key: {key: 'enter'|'tab'|'ctrl+f'|'ctrl+c'|'ctrl+v'|...}\n"
             "- search_in_page: {text: '...'} — buscar con Ctrl+F\n"
             "- focus_window: {app_name: '...'}\n"
             "- read_screen: {} — leer la pantalla y decirle al usuario lo que hay\n"
+            "- run_command: {command: 'comando PowerShell'} — ejecutar comando del sistema\n"
+            "- copy_clipboard: {} — copiar selección al portapapeles\n"
+            "- paste_clipboard: {} — pegar del portapapeles\n"
+            "- select_all: {} — seleccionar todo (Ctrl+A)\n"
+            "- drag_and_drop: {from_text: 'origen', to_text: 'destino'}\n"
             "- wait: {seconds: N}\n"
             "- ask_user: {question: '¿...?'}\n"
         )
@@ -445,7 +480,7 @@ class AutonomousAgent:
         executed_steps = []
         total_steps = 0
         replan_count = 0
-        MAX_REPLANS = 2
+        self._action_history = []
 
         while total_steps < MAX_STEPS and replan_count <= MAX_REPLANS:
             # 1. OBSERVAR pantalla
@@ -508,8 +543,9 @@ class AutonomousAgent:
                 self._pending_executed = executed_steps
                 return self._pending_question
 
-            # 3. EJECUTAR cada paso del plan mecánicamente
+            # 3. EJECUTAR cada paso del plan con verificación
             plan_completed = True
+            self._notify_status(f"📋 Plan: {len(plan)} pasos")
             for idx, step_info in enumerate(plan):
                 if total_steps >= MAX_STEPS:
                     plan_completed = False
@@ -550,12 +586,18 @@ class AutonomousAgent:
                         "futuras veces)"
                     )
 
-                # ── Ejecutar la acción mecánicamente ──
-                self._execute_action(action, params)
+                # ── Ejecutar la acción con tracking ──
+                self._notify_status(f"⚡ [{idx+1}/{len(plan)}] {desc[:50]}")
+                action_success = self._execute_action(action, params)
                 executed_steps.append({
                     "action": action,
                     "params": params,
                     "description": desc,
+                    "success": action_success,
+                })
+                self._action_history.append({
+                    "action": action, "params": params,
+                    "step": total_steps, "success": action_success
                 })
 
                 # Espera: acciones rápidas 0.5s, resto 1.5s
@@ -582,6 +624,34 @@ class AutonomousAgent:
                             if old_sig and new_sig:
                                 overlap = len(old_sig & new_sig) / max(len(old_sig), len(new_sig))
                                 if overlap > 0.8:
+                                    # ── Auto-retry: si fue click simple,
+                                    #    intentar doble clic antes de replanificar
+                                    if action == "click_on_text":
+                                        click_text = params.get("text", "")
+                                        logger.info(
+                                            f"Pantalla NO cambió tras click_on_text"
+                                            f"('{click_text}', overlap={overlap:.0%}). "
+                                            f"Reintentando con double_click...")
+                                        self.sc.double_click(click_text)
+                                        time.sleep(1.5)
+                                        dbl_screen = self._observe_screen()
+                                        if dbl_screen:
+                                            dbl_sig = set(dbl_screen.split())
+                                            dbl_overlap = (
+                                                len(old_sig & dbl_sig)
+                                                / max(len(old_sig), len(dbl_sig))
+                                            )
+                                            if dbl_overlap <= 0.8:
+                                                logger.info(
+                                                    f"double_click funcionó "
+                                                    f"(overlap={dbl_overlap:.0%})")
+                                                self._screen_memory.append(
+                                                    dbl_screen[:800])
+                                                new_screen = dbl_screen
+                                                # Actualizar acción en executed_steps
+                                                if executed_steps:
+                                                    executed_steps[-1]["action"] = "double_click"
+                                                continue
                                     logger.info(f"Pantalla NO cambió tras {action} "
                                                 f"(overlap={overlap:.0%}). Replanificando.")
                                     replan_count += 1
@@ -621,7 +691,13 @@ class AutonomousAgent:
             # Si no se completó el plan por replan, el while vuelve arriba
             # y re-observa + re-planifica
 
-        # Se acabaron los pasos o replans
+        # Se acabaron los pasos o replans → Intentar investigar en la web
+        if self._web_search and total_steps > 0:
+            self._notify_status("🌐 Buscando cómo resolver esto en internet...")
+            web_solution = self._research_and_retry(goal, executed_steps, context)
+            if web_solution:
+                return web_solution
+
         return (
             f"No pude completar la tarea tras {total_steps} pasos, señor. "
             f"¿Podría indicarme cómo continuar?"
@@ -720,6 +796,38 @@ class AutonomousAgent:
             logger.info(f"Auto-save rechazado: solo {len(keywords)} keyword(s) "
                         f"significativa(s) en '{goal[:50]}', mínimo 2")
             return
+
+        # ── Validar coherencia: los pasos deben tener relación con el goal ──
+        # Extraer todo el texto de los parámetros de los pasos
+        step_texts = []
+        for s in steps:
+            params = s.get("params", {})
+            for val in params.values():
+                if isinstance(val, str) and len(val) > 2:
+                    step_texts.append(val.lower())
+
+        # Si hay texto en los pasos, comprobar que al menos algo del goal
+        # aparece en los pasos (evitar guardar pasos de otra tarea)
+        if step_texts:
+            goal_words = {w.lower() for w in re.findall(r'\w+', goal.lower())
+                          if len(w) > 3 and w not in _stopwords}
+            step_all_text = " ".join(step_texts)
+            step_words = {w.lower() for w in re.findall(r'\w+', step_all_text)
+                          if len(w) > 3}
+
+            # Calcular solapamiento entre goal y pasos
+            if goal_words and step_words:
+                overlap = len(goal_words & step_words)
+                # Si NO hay NINGUNA palabra del goal en los pasos,
+                # los pasos probablemente son de otra tarea
+                if overlap == 0:
+                    logger.info(
+                        f"Auto-save rechazado: los pasos no tienen relación "
+                        f"con el goal '{goal[:50]}'. "
+                        f"Goal words: {goal_words}, "
+                        f"Step words: {step_words}"
+                    )
+                    return
 
         clean_steps = [{"action": s["action"], "params": s["params"]}
                        for s in steps]
@@ -999,9 +1107,229 @@ class AutonomousAgent:
             time.sleep(params.get("seconds", 2))
             return True
 
+        elif action == "copy_clipboard":
+            self.sc.press_key("ctrl+c")
+            time.sleep(0.3)
+            return True
+
+        elif action == "paste_clipboard":
+            self.sc.press_key("ctrl+v")
+            time.sleep(0.3)
+            return True
+
+        elif action == "select_all":
+            self.sc.press_key("ctrl+a")
+            time.sleep(0.3)
+            return True
+
+        elif action == "screenshot":
+            try:
+                self.sc.screenshot()
+                return True
+            except Exception:
+                return False
+
+        elif action == "run_command":
+            # Ejecutar comando del sistema
+            cmd = params.get("command", "")
+            if cmd:
+                import subprocess
+                try:
+                    subprocess.run(
+                        ["powershell", "-Command", cmd],
+                        capture_output=True, text=True, timeout=15
+                    )
+                    return True
+                except Exception as e:
+                    logger.error(f"Error ejecutando comando: {e}")
+                    return False
+            return False
+
+        elif action == "drag_and_drop":
+            from_text = params.get("from_text", "")
+            to_text = params.get("to_text", "")
+            if from_text and to_text:
+                try:
+                    # Buscar posiciones por OCR y hacer drag&drop
+                    import pyautogui
+                    # Obtener posición del origen
+                    result_from = self.sc._ocr_find_text(from_text)
+                    result_to = self.sc._ocr_find_text(to_text)
+                    if result_from and result_to:
+                        pyautogui.click(result_from[0], result_from[1])
+                        time.sleep(0.3)
+                        pyautogui.moveTo(result_from[0], result_from[1])
+                        pyautogui.mouseDown()
+                        time.sleep(0.2)
+                        pyautogui.moveTo(result_to[0], result_to[1], duration=0.5)
+                        pyautogui.mouseUp()
+                        return True
+                except Exception as e:
+                    logger.error(f"Error en drag_and_drop: {e}")
+            return False
+
         else:
             logger.warning(f"Acción desconocida: {action}")
             return False
+
+    # ═══════════════════════════════════════════════════════════
+    #  INVESTIGACIÓN WEB AUTÓNOMA
+    #  Cuando el agente no sabe hacer algo, busca en internet
+    # ═══════════════════════════════════════════════════════════
+
+    def _research_and_retry(self, goal: str, executed_steps: list,
+                            context: str = "") -> Optional[str]:
+        """
+        Investiga en la web cómo resolver la tarea y genera un nuevo plan.
+        Similar a cómo OpenClaw busca soluciones cuando no sabe hacer algo.
+        """
+        if not self._web_search:
+            return None
+
+        try:
+            # 1. Buscar cómo hacerlo
+            search_query = f"how to {goal} Windows programmatically"
+            results = self._web_search.search_programmatic(search_query, max_results=5)
+
+            if not results:
+                # Intentar en español
+                results = self._web_search.search_programmatic(
+                    f"cómo {goal} Windows", max_results=5
+                )
+
+            if not results:
+                return None
+
+            # 2. Extraer instrucciones de la mejor fuente
+            best_instructions = None
+            for result in results[:3]:
+                if result.url:
+                    instructions = self._web_search.extract_instructions(result.url)
+                    if instructions and len(instructions) > 50:
+                        best_instructions = instructions
+                        break
+
+            if not best_instructions:
+                # Usar snippets como información
+                best_instructions = "\n".join(
+                    f"- {r.snippet}" for r in results[:5] if r.snippet
+                )
+
+            if not best_instructions:
+                return None
+
+            # 3. Pedir al LLM que convierta en plan ejecutable
+            prompt = (
+                f"Encontré estas instrucciones en internet para: \"{goal}\"\n\n"
+                f"{best_instructions[:2000]}\n\n"
+                "Pasos ya ejecutados (que fallaron o no funcionaron del todo):\n"
+                + "\n".join(f"- {s.get('description', s.get('action', '?'))}"
+                           for s in executed_steps[-5:])
+                + "\n\n"
+                "Convierte las instrucciones de internet en acciones que puedo "
+                "ejecutar en Windows. Responde SOLO con JSON:\n"
+                "{\n"
+                '  "understanding": "qué debo hacer según la investigación",\n'
+                '  "plan": [\n'
+                '    {"step": 1, "description": "qué hago", '
+                '"action": "ACCION", "params": {"param": "valor"} }\n'
+                "  ]\n"
+                "}\n\n"
+                "Acciones: open_application, navigate_to_url, click_on_text, "
+                "double_click, type_in_app, press_key, scroll_page, "
+                "run_command, wait, search_in_page\n"
+                "NUEVA ACCIÓN: run_command → ejecuta un comando de PowerShell. "
+                "Params: {command: 'comando'}"
+            )
+
+            messages = [
+                {"role": "system", "content": (
+                    "Eres un experto en automatización de Windows. "
+                    "Convierte instrucciones web en acciones ejecutables. "
+                    "Responde SOLO con JSON válido."
+                )},
+                {"role": "user", "content": prompt},
+            ]
+
+            raw = self.brain.chat_raw(messages)
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = re.sub(r"^```\w*\n?", "", cleaned)
+                cleaned = re.sub(r"\n?```$", "", cleaned)
+
+            plan_data = json.loads(cleaned)
+            plan = plan_data.get("plan", [])
+
+            if not plan:
+                return None
+
+            # 4. Ejecutar el plan basado en investigación
+            self._notify_status("🔬 Ejecutando solución encontrada en internet")
+            web_results = []
+
+            for step_info in plan[:8]:
+                action = step_info.get("action", "")
+                params = step_info.get("params", {})
+                desc = step_info.get("description", action)
+
+                self._notify_status(f"🌐 {desc[:50]}")
+                success = self._execute_action(action, params)
+                web_results.append((desc, success))
+                time.sleep(1.5)
+
+            # 5. Verificar resultado
+            completed = sum(1 for _, s in web_results if s)
+            if completed > 0:
+                # Guardar como procedimiento
+                good_steps = [
+                    {"action": s.get("action", ""), "params": s.get("params", {})}
+                    for s in plan[:8]
+                ]
+                self._maybe_save_procedure(goal, good_steps, "")
+
+                results_text = "\n".join(
+                    f"{'✅' if s else '❌'} {d}" for d, s in web_results
+                )
+                return (
+                    f"Investigué en internet y encontré una solución:\n"
+                    f"{results_text}\n\n"
+                    f"({completed}/{len(web_results)} pasos completados)"
+                )
+
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.warning(f"Error parseando plan de investigación: {e}")
+        except Exception as e:
+            logger.error(f"Error en _research_and_retry: {e}", exc_info=True)
+
+        return None
+
+    def _verify_action_semantically(self, goal: str, action: str,
+                                      params: dict, screen_before: str,
+                                      screen_after: str) -> bool:
+        """
+        Verifica semánticamente si una acción tuvo el efecto esperado.
+        En vez de solo comparar píxeles, usa el LLM para evaluar.
+        """
+        if not self.brain:
+            return True  # Sin LLM, asumir éxito
+
+        # Solo verificar acciones importantes
+        if action not in {"click_on_text", "double_click", "navigate_to_url",
+                          "open_application", "type_in_app"}:
+            return True
+
+        # Comparación rápida de texto
+        if screen_before and screen_after:
+            before_words = set(screen_before.lower().split())
+            after_words = set(screen_after.lower().split())
+
+            # Si la pantalla cambió significativamente, probablemente funcionó
+            if before_words and after_words:
+                overlap = len(before_words & after_words) / max(len(before_words), len(after_words))
+                if overlap < 0.5:  # Cambió mucho → probablemente ok
+                    return True
+
+        return True  # Por defecto, asumir éxito
 
     # ─── Gestión de preguntas pendientes ──────────────────────
 

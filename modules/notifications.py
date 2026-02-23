@@ -6,6 +6,8 @@ Usa toast notifications nativas de Windows 10/11.
 """
 
 import logging
+import os
+import subprocess
 import threading
 import time
 from typing import Callable, Optional
@@ -15,6 +17,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 logger = logging.getLogger("jarvis.notifications")
+
+# ─── Helper: ocultar consolas en subprocess (.pyw) ────────
+_STARTUPINFO = None
+_CREATION_FLAGS = 0
+if os.name == 'nt':
+    _STARTUPINFO = subprocess.STARTUPINFO()
+    _STARTUPINFO.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    _STARTUPINFO.wShowWindow = 0
+    _CREATION_FLAGS = subprocess.CREATE_NO_WINDOW
 
 # Umbrales por defecto
 DEFAULT_THRESHOLDS = {
@@ -254,6 +265,7 @@ class NotificationManager:
             subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
                 capture_output=True, text=True, timeout=10,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
         except Exception as e:
             logger.debug(f"Error enviando toast: {e}")
@@ -282,7 +294,7 @@ class NotificationManager:
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                creationflags=0x00000008,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
         except Exception as e:
             logger.debug(f"Error en balloon tip: {e}")

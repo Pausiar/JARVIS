@@ -1,9 +1,7 @@
 """
-J.A.R.V.I.S. — Orchestrator (Enhanced)
+J.A.R.V.I.S. — Orchestrator
 Orquesta los módulos según la petición del usuario.
 Conecta el cerebro (LLM) con los módulos de acción.
-Integra el ProblemSolver para resolver tareas desconocidas
-y el ToolRegistry para descubrimiento dinámico de capacidades.
 """
 
 import logging
@@ -11,29 +9,14 @@ import re
 import time
 import datetime
 import os
-import subprocess
 from typing import Optional
 from pathlib import Path
-
-# ─── Helper: ocultar consolas en subprocess (.pyw) ────────
-_STARTUPINFO = None
-_CREATION_FLAGS = 0
-if os.name == 'nt':
-    _STARTUPINFO = subprocess.STARTUPINFO()
-    _STARTUPINFO.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    _STARTUPINFO.wShowWindow = 0  # SW_HIDE
-    _CREATION_FLAGS = subprocess.CREATE_NO_WINDOW
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.brain import JarvisBrain
 from core.command_parser import CommandParser, CommandIntent
-from core.tool_registry import (
-    ToolRegistry, ToolCategory, ToolParameter, Tool,
-    get_registry, auto_register_module
-)
-from core.problem_solver import ProblemSolver
 from modules.file_manager import FileManager
 from modules.document_processor import DocumentProcessor
 from modules.system_control import SystemControl
@@ -123,70 +106,12 @@ class Orchestrator:
         sc = self.modules.get("system_control")
         self.agent = AutonomousAgent(self.brain, sc, self.parser)
 
-        # Inyectar web_search en el agente autónomo (v3)
-        ws = self.modules.get("web_search")
-        if ws and hasattr(self.agent, 'set_web_search'):
-            self.agent.set_web_search(ws)
-
-        # ─── Tool Registry: descubrimiento dinámico de capacidades ───
-        self.tool_registry = get_registry()
-        self._register_all_tools()
-
-        # ─── Problem Solver: resolución inteligente de problemas ───
-        self.problem_solver = ProblemSolver(
-            brain=self.brain,
-            orchestrator=self,
-            web_search=self.modules.get("web_search"),
-            code_executor=self.modules.get("code_executor"),
-            autonomous_agent=self.agent,
-            learner=self.learner,
-            system_control=self.modules.get("system_control"),
-            memory=self.memory,
-        )
-
         # Último input para aprendizaje de correcciones
         self._last_user_input = ""
         self._last_action = ""
         self._last_goal = ""  # Para follow-up de preguntas del agente
 
-        logger.info(
-            f"Orchestrator inicializado. "
-            f"{self.learner.get_skill_count()} habilidades aprendidas, "
-            f"{self.tool_registry.count()} herramientas registradas."
-        )
-
-    # ─── Registro de herramientas ─────────────────────────────
-
-    def _register_all_tools(self):
-        """Registra todos los módulos y sus métodos en el ToolRegistry."""
-        module_categories = {
-            "file_manager": ToolCategory.FILE_SYSTEM,
-            "document_processor": ToolCategory.FILE_SYSTEM,
-            "system_control": ToolCategory.SYSTEM,
-            "web_search": ToolCategory.WEB,
-            "email_manager": ToolCategory.COMMUNICATION,
-            "code_executor": ToolCategory.CODE,
-            "automation": ToolCategory.AUTOMATION,
-            "memory": ToolCategory.DATA,
-            "vision": ToolCategory.VISION,
-            "media_control": ToolCategory.MEDIA,
-            "notifications": ToolCategory.COMMUNICATION,
-            "calendar": ToolCategory.CALENDAR,
-        }
-        for name, module in self.modules.items():
-            cat = module_categories.get(name, ToolCategory.OTHER)
-            try:
-                auto_register_module(module, name, cat)
-            except Exception as e:
-                logger.warning(f"Error registrando módulo {name}: {e}")
-
-        # Registrar plugins
-        for plugin_name, plugin_info in self.plugin_loader.plugins.items():
-            try:
-                if hasattr(plugin_info, 'module') and plugin_info.module:
-                    auto_register_module(plugin_info.module, f"plugin_{plugin_name}", ToolCategory.PLUGIN)
-            except Exception as e:
-                logger.warning(f"Error registrando plugin {plugin_name}: {e}")
+        logger.info(f"Orchestrator inicializado. {self.learner.get_skill_count()} habilidades aprendidas.")
 
     # ─── Procesamiento principal ──────────────────────────────
 
@@ -243,7 +168,38 @@ class Orchestrator:
                 self.memory.save_message("assistant", response)
                 return response
 
-        # ── Saludos / despedidas ──
+        # Paso 0a: Verificar si tenemos una habilidad aprendida para esto
+        # PERO: si el usuario da un comando de pantalla explícito
+        # (haz click, pulsa, pincha, selecciona...) → NUNCA usar skill,
+        # siempre delegar al agente que puede VER la pantalla.
+        _screen_action_re = re.compile(
+            r"(?:haz\s+cli?ck|pulsa|pincha|selecciona|haz\s+doble\s+cli?ck"
+            r"|cli(?:ck|ca)\s+(?:en|sobre)|click\s+on"
+            r"|abre\s+el\s+(?:archivo|documento|pdf|enlace|link)"
+            r"|descarga\s+el\s+(?:archivo|pdf|documento))",
+            re.IGNORECASE,
+        )
+        _is_screen_cmd = bool(_screen_action_re.search(user_input))
+
+        if not _is_screen_cmd:
+            learned_skill = self.learner.find_skill(user_input)
+        else:
+            learned_skill = None
+            logger.info("Comando de pantalla detectado, saltando skill lookup.")
+
+        if learned_skill:
+            logger.info(f"Usando habilidad aprendida: '{learned_skill['name']}'")
+            result = self.learner.execute_skill(learned_skill, user_input)
+            if result and not self._is_failure_response(result):
+                response = f"Hecho, señor. (habilidad aprendida) {result}"
+                self.memory.save_message("assistant", response)
+                return response
+            else:
+                logger.warning(f"Skill '{learned_skill['name']}' devolvió error, ignorando.")
+                # Borrar la skill defectuosa
+                self.learner.forget_skill(learned_skill['name'])
+
+        # Verificar saludos / despedidas
         if self.parser.is_greeting(user_input):
             response = self._handle_greeting()
             self.memory.save_message("assistant", response)
@@ -254,71 +210,358 @@ class Orchestrator:
             self.memory.save_message("assistant", response)
             return response
 
-        # ── Respuestas locales instantáneas (hora, fecha, sistema) ──
+        # Paso 0b: ¿Es texto explicativo / enseñanza?
+        # Si el usuario está EXPLICANDO algo ("para ver X deberías...",
+        # "cuando quieras hacer...", "lo que tienes que hacer es..."),
+        # NO es un comando → APRENDER el procedimiento + responder localmente.
+        if self._is_explanatory_text(user_input):
+            logger.info("Texto explicativo detectado. Aprendiendo procedimiento...")
+            # Intentar aprender el procedimiento que el usuario enseña
+            learn_response = self.agent.learn_from_user(user_input)
+            self.memory.save_message("assistant", learn_response)
+            return learn_response
+
+        # Paso 0c: ¿Es una pregunta sobre JARVIS / estado interno?
         local_answer = self._try_local_answer(user_input)
         if local_answer:
             logger.info("Respondido localmente sin LLM.")
             self.memory.save_message("assistant", local_answer)
             return local_answer
 
-        # ── Texto explicativo → aprender procedimiento ──
-        if self._is_explanatory_text(user_input):
-            logger.info("Texto explicativo detectado. Aprendiendo procedimiento...")
-            learn_response = self.agent.learn_from_user(user_input)
-            self.memory.save_message("assistant", learn_response)
-            return learn_response
+        # Paso 0c: ¿Es un workflow complejo multi-paso?
+        _is_complex = self._is_complex_workflow(user_input)
+        if _is_complex:
+            logger.info("Comando complejo multi-paso detectado. "
+                        "Intentando parser compuesto primero.")
 
-        # ── Petición conversacional → responder con LLM directamente ──
-        if self._is_conversational(user_input):
-            logger.info(f"Petición conversacional detectada: '{user_input[:60]}'")
-            recent = self.memory.get_recent_messages(limit=6)
-            chat_ctx = "\n".join(
-                f"{m['role']}: {m['content'][:120]}" for m in recent
+        # Paso 1: SIEMPRE intentar parser compuesto primero.
+        # Incluso para workflows complejos: el parser regex puede manejar
+        # la mayoría de secuencias (abrir app + navegar + buscar) sin
+        # necesitar el LLM, lo cual es crítico con rate limit estricto.
+        compound_intents = self.parser.parse_compound(user_input)
+        if compound_intents:
+            # Pre-check: ¿hay un objetivo informacional?
+            _pre_goal = self._extract_informational_goal(user_input)
+
+            # ── Funciones que el parser puede ejecutar DIRECTAMENTE ──
+            # Solo comandos de sistema puros que NO requieren entender
+            # el contexto de la pantalla ni interpretar el objetivo.
+            _DIRECT_SAFE = {
+                "open_application", "navigate_to_url",
+                "close_application",
+                "set_volume", "volume_up", "volume_down", "toggle_mute",
+                "set_brightness", "brightness_up", "brightness_down",
+                "take_screenshot", "lock_screen", "shutdown", "restart",
+                "search",  # web search explícita
+            }
+
+            # ── Verificar si TODOS los intents son de ejecución directa ──
+            # Y no hay objetivo informacional ni indicios de contexto
+            all_direct = all(
+                ci.function in _DIRECT_SAFE
+                for ci in compound_intents
+                if ci.confidence >= 0.8
             )
-            response = self.brain.chat(user_input, context=chat_ctx)
-            if response and not self._is_failure_response(response):
+
+            # Validar que open_application tenga un nombre de app real
+            # (no frases genéricas como "el pdf descargado")
+            _KNOWN_APPS = {
+                "chrome", "firefox", "edge", "brave", "opera",
+                "explorer", "explorador", "word", "excel", "powerpoint",
+                "notepad", "bloc de notas", "calculadora", "calculator",
+                "spotify", "discord", "steam", "telegram", "whatsapp",
+                "teams", "zoom", "slack", "obs", "vlc", "paint",
+                "terminal", "powershell", "cmd", "vscode", "code",
+                "visual studio", "blender", "gimp", "audacity",
+                "outlook", "correo", "gmail", "mail",
+            }
+            for ci in compound_intents:
+                if ci.function == "open_application" and ci.confidence >= 0.8:
+                    app = ci.params.get("app_name", "").lower().strip()
+                    # Si no es una app conocida → no es seguro ejecutar directo
+                    if not any(known in app for known in _KNOWN_APPS):
+                        all_direct = False
+                        logger.info(f"open_application('{app}') no es app conocida, "
+                                    f"delegando al agente")
+                        break
+
+            results = []
+            unhandled_parts = []
+
+            if not all_direct or _pre_goal:
+                # ── DELEGAR AL AGENTE AUTÓNOMO ──
+                # Ejecutar solo navegación segura (abrir app conocida, URL)
+                for ci in compound_intents:
+                    if ci.confidence >= 0.8 and ci.function in ("open_application", "navigate_to_url"):
+                        app = ci.params.get("app_name", "").lower().strip()
+                        # Solo ejecutar si es app conocida o es navigate_to_url
+                        if ci.function == "navigate_to_url" or any(known in app for known in _KNOWN_APPS):
+                            logger.info(f"Intención de navegación: {ci}")
+                            r = self._execute_intent(ci)
+                            if r:
+                                results.append(r)
+                            if ci.function == "open_application":
+                                import time as _t
+                                _t.sleep(2.5)
+                            elif ci.function == "navigate_to_url":
+                                import time as _t
+                                _t.sleep(1.0)
+                    elif ci.confidence >= 0.8:
+                        logger.info(f"Saltando {ci.function}('{ci.params}'): "
+                                    f"el agente autónomo lo manejará con visión de pantalla")
+
+                # Delegar al agente autónomo
+                agent_goal = _pre_goal or user_input
+                logger.info(f"Delegando al agente autónomo: '{agent_goal[:80]}'")
+                self._last_goal = agent_goal
+                nav_actions = [ci.to_dict() for ci in compound_intents
+                               if ci.function in ("open_application", "navigate_to_url")]
+                agent_result = self.agent.execute_goal(
+                    goal=agent_goal,
+                    initial_actions=nav_actions if nav_actions else None,
+                )
+                self.memory.save_message("assistant", agent_result)
+                return agent_result
+
+            # ── Ejecución directa: solo cuando NO hay interacción con pantalla ──
+            for ci in compound_intents:
+                if ci.confidence >= 0.8:
+
+                    logger.info(f"Intención compuesta detectada: {ci}")
+                    r = self._execute_intent(ci)
+                    if r:
+                        results.append(r)
+                    # Pausa entre acciones: después de abrir app o navegar
+                    # hay que esperar a que la ventana/página cargue.
+                    if ci.function in ("open_application",):
+                        import time as _t
+                        _t.sleep(2.5)
+                    elif ci.function in ("navigate_to_url",):
+                        import time as _t
+                        _t.sleep(1.0)  # navigate_to_url ya espera 3s internamente
+
+            # Detectar partes del texto que no se pudieron parsear
+            # pero que podrían ser interacciones dentro de apps
+            _action_verbs_re = re.compile(
+                r"(?:entra|entrar|encuentra|encontrar|navega|navegar|"
+                r"haz\s+clic|pulsa|pincha|selecciona|escribe\s+en)\s+.+",
+                re.IGNORECASE,
+            )
+            # Buscar fragmentos no reconocidos en el texto original
+            text_parts = re.split(
+                r"\s+y\s+(?:luego\s+|después\s+|también\s+)?|\s*,\s*(?:y\s+)?",
+                user_input, flags=re.IGNORECASE,
+            )
+            for part in text_parts:
+                part = part.strip()
+                if part and _action_verbs_re.search(part):
+                    if not self.parser._match_patterns(part):
+                        # Intentar ejecutar como interacción dentro de app
+                        sc = self.modules.get("system_control")
+                        if sc:
+                            try:
+                                interact_result = sc.interact_with_app(part)
+                                results.append(interact_result)
+                            except Exception as e:
+                                logger.warning(f"Error en interacción: {e}")
+                                unhandled_parts.append(part)
+                        else:
+                            unhandled_parts.append(part)
+
+            if results:
+                response = self._build_smart_response(results)
+                if unhandled_parts:
+                    response += (
+                        "\n\nAlgunas acciones no se pudieron completar: "
+                        + "; ".join(f'"{p}"' for p in unhandled_parts)
+                    )
                 self.memory.save_message("assistant", response)
                 return response
-            # Si el LLM falló, intentar con el agente como fallback
-            logger.info("LLM conversacional falló, delegando al agente.")
 
-        # ══════════════════════════════════════════════════════
-        #  TODO lo demás → Agente autónomo + Problem Solver
-        #  1. El agente intenta ejecutar directamente.
-        #  2. Si falla, ProblemSolver descompone, investiga y resuelve.
-        # ══════════════════════════════════════════════════════
-        logger.info(f"Delegando al agente: '{user_input[:80]}'")
-        self._last_goal = user_input
-        recent = self.memory.get_recent_messages(limit=6)
-        chat_ctx = "\n".join(
-            f"{m['role']}: {m['content'][:120]}" for m in recent
-        )
-        agent_result = self.agent.execute_goal(
-            goal=user_input, context=chat_ctx
-        )
+        if not _is_complex:
+            # Paso 1b: Detección simple por patrones
+            # (solo si no es complejo, ya que parse_compound lo cubrió)
+            intent = self.parser.parse(user_input)
+            if intent and intent.confidence >= 0.8:
+                # ── Si la acción necesita visión de pantalla → agente ──
+                if intent.function in ("click_on_text", "search_in_page",
+                                       "interact_with_app"):
+                    logger.info(f"Acción de pantalla detectada: {intent}. "
+                                f"Delegando al agente autónomo.")
+                    self._last_goal = user_input
+                    agent_result = self.agent.execute_goal(goal=user_input)
+                    self.memory.save_message("assistant", agent_result)
+                    return agent_result
 
-        # Si el agente completó con éxito, devolver resultado
-        if agent_result and not self._is_failure_response(agent_result):
+                # ── open_application con nombre no reconocido → agente ──
+                if intent.function == "open_application":
+                    _known = {
+                        "chrome", "firefox", "edge", "brave", "opera",
+                        "explorer", "explorador", "word", "excel", "powerpoint",
+                        "notepad", "bloc de notas", "calculadora", "calculator",
+                        "spotify", "discord", "steam", "telegram", "whatsapp",
+                        "teams", "zoom", "slack", "obs", "vlc", "paint",
+                        "terminal", "powershell", "cmd", "vscode", "code",
+                        "visual studio", "blender", "gimp", "audacity",
+                        "outlook", "correo", "gmail", "mail",
+                    }
+                    app = intent.params.get("app_name", "").lower().strip()
+                    if not any(k in app for k in _known):
+                        logger.info(f"open_application('{app}') no es app conocida. "
+                                    f"Delegando al agente.")
+                        self._last_goal = user_input
+                        agent_result = self.agent.execute_goal(goal=user_input)
+                        self.memory.save_message("assistant", agent_result)
+                        return agent_result
+
+                logger.info(f"Intención directa detectada: {intent}")
+                result = self._execute_intent(intent)
+                if result:
+                    response = self._build_smart_response([result])
+                    self.memory.save_message("assistant", response)
+                    return response
+
+        # Paso 1c: ¿Hay un objetivo informacional que el agente autónomo pueda resolver?
+        # Ej: "mira las tareas en aules", "busca mis notas de interfaces"
+        # Esto funciona incluso sin acciones compuestas previas.
+        goal = self._extract_informational_goal(user_input)
+        if goal:
+            # Verificar si hay un procedimiento guardado o un site conocido
+            procedure = self.agent.find_procedure(goal)
+            if procedure:
+                logger.info(f"Procedimiento guardado encontrado para: '{goal}'")
+                self._last_goal = goal
+                result = self.agent.execute_goal(goal=goal)
+                self.memory.save_message("assistant", result)
+                return result
+
+            # Si menciona un sitio conocido, navegar primero y luego buscar
+            site_match = self._extract_known_site(user_input)
+            if site_match:
+                url = self.parser._KNOWN_SITES.get(site_match)
+                if url:
+                    logger.info(f"Navegando a {site_match} ({url}) y ejecutando objetivo: '{goal}'")
+                    sc = self.modules.get("system_control")
+                    if sc:
+                        sc.open_application("chrome")
+                        time.sleep(2.5)
+                        sc.navigate_to_url(url)
+                        time.sleep(2)
+                        self._last_goal = goal
+                        result = self.agent.execute_goal(goal=goal)
+                        self.memory.save_message("assistant", result)
+                        return result
+
+            # Si no hay procedimiento ni site, pero hay un objetivo claro,
+            # usar el agente autónomo directamente con la pantalla actual.
+            # Ej: "mira que hay que hacer en la tarea del tema 6"
+            # (el usuario ya está en una página con la info visible)
+            logger.info(f"Objetivo informacional sin site ni procedimiento: '{goal}'. "
+                        f"Usando agente autónomo sobre pantalla actual.")
+            self._last_goal = goal
+            result = self.agent.execute_goal(goal=goal)
+            self.memory.save_message("assistant", result)
+            return result
+
+        # Paso 1d: Safety net — si el usuario pide una ACCIÓN que no fue
+        # capturada por el parser, delegarla al agente autónomo.
+        # Esto cubre: "descarga el pdf", "abre el archivo", "busca X en descargas", etc.
+        _action_re = re.compile(
+            r"(?:descarga|descargar|download"
+            r"|abre|abrir|open"
+            r"|busca|buscar|encuentra|encontrar"
+            r"|haz\s+click?|click|pulsa|pincha"
+            r"|entra\s+en|navega\s+a|ve\s+a|accede"
+            r"|cierra|cerrar|close"
+            r"|copia|copiar|pega|pegar"
+            r"|selecciona|seleccionar"
+            r"|escribe\s+en|rellena|completa"
+            r")\s+.+",
+            re.IGNORECASE,
+        )
+        if _action_re.match(user_input.strip()):
+            logger.info(f"Comando de acción no parseado, delegando al agente: '{user_input[:60]}'")
+            self._last_goal = user_input
+            agent_result = self.agent.execute_goal(goal=user_input)
             self.memory.save_message("assistant", agent_result)
             return agent_result
 
-        # ── Fallback: ProblemSolver para tareas complejas / desconocidas ──
-        logger.info("Agente no pudo completar. Activando ProblemSolver...")
-        try:
-            ps_result = self.problem_solver.solve(
-                problem=user_input,
-                context=chat_ctx,
-            )
-            if ps_result and not self._is_failure_response(ps_result):
-                self.memory.save_message("assistant", ps_result)
-                return ps_result
-        except Exception as e:
-            logger.warning(f"ProblemSolver falló: {e}")
+        # Paso 2: Usar el LLM para entender la petición
+        # Detectar si el usuario EXPLÍCITAMENTE pide leer/ver la pantalla
+        # Solo cuando el usuario hace una pregunta directa sobre lo que hay
+        # en pantalla. NO activar por menciones casuales de "pantalla".
+        needs_screen = bool(re.search(
+            r"(?:qu[eé]|que)\s+(?:hay|pone|dice|se\s+ve|aparece)\s+(?:en\s+)?(?:la\s+)?(?:pantalla|la\s+pantalla)"
+            r"|(?:lee|leer|dime)\s+(?:lo\s+que|qu[eé]|que)\s+(?:hay|pone|dice|se\s+ve)\s+(?:en\s+)?(?:la\s+)?pantalla"
+            r"|(?:describe|describir)\s+(?:lo\s+que|la)\s+(?:pantalla|se\s+ve\s+en\s+pantalla)"
+            r"|(?:lee|leer)\s+(?:la\s+)?pantalla"
+            r"|(?:qu[eé]|que)\s+(?:hay|pone|dice)\s+(?:aqu[ií]|ah[ií])",
+            user_input, re.IGNORECASE
+        ))
 
-        # Si ambos fallaron, devolver el resultado del agente (más informativo)
-        final = agent_result or "No pude completar esa tarea, señor. ¿Podría darme más detalles?"
-        self.memory.save_message("assistant", final)
-        return final
+        # Detectar si es una pregunta conversacional simple (no necesita contexto pesado)
+        is_simple_chat = bool(re.search(
+            r"^(?:cu[eé]ntame|dime|sabes|conoces|qu[eé]\s+(?:es|son|significa|opinas)|"
+            r"c[oó]mo\s+(?:est[aá]s|funciona|se\s+hace)|"
+            r"por\s+qu[eé]|qui[eé]n|cu[aá]ndo|cu[aá]nto|d[oó]nde|"
+            r"haz(?:me)?\s+(?:un|una)\s+(?:chiste|broma|historia|resumen)|"
+            r"explica|define|traduce|escribe|recomienda|sugiere|"
+            r"cu[aá]l\s+es|hab[ií]a\s+una\s+vez|hab[ií]a|"
+            r"hola|hey|oye|mira|a\s+ver)",
+            user_input, re.IGNORECASE
+        ))
+
+        # Para chat simple, contexto mínimo. Para pantalla, incluir OCR.
+        if is_simple_chat and not needs_screen:
+            context = self._build_context_minimal()
+        else:
+            context = self._build_context(include_screen=needs_screen)
+
+        llm_response = self.brain.chat(user_input, context=context)
+
+        # Paso 3: Extraer y ejecutar acciones del LLM
+        llm_intents = self.parser.parse_llm_actions(llm_response)
+        action_results = []
+        for llm_intent in llm_intents:
+            result = self._execute_intent(llm_intent)
+            if result:
+                action_results.append(result)
+
+        # Paso 3b: Safety net — detectar si el LLM afirmó haber hecho algo
+        # sin generar ACTION tags (alucinación de acción)
+        if not llm_intents:
+            fallback_result = self._detect_and_fix_hallucinated_action(
+                user_input, llm_response
+            )
+            if fallback_result:
+                action_results.append(fallback_result)
+
+        # Paso 4: Limpiar y devolver respuesta
+        clean_response = self.brain.clean_response(llm_response)
+
+        # Si hubo acciones ejecutadas, evaluar resultados honestamente
+        if action_results:
+            clean_response = self._build_smart_response(action_results)
+
+        # Paso 5: Detectar si JARVIS no supo hacer algo → investigar y aprender
+        if self._should_learn(user_input, clean_response, llm_intents, action_results):
+            logger.info("Detectado que no sé hacer esto. Investigando...")
+            learn_result = self.learner.research_and_learn(
+                user_input, failure_context=clean_response
+            )
+            if learn_result and not learn_result.startswith("Error"):
+                clean_response = learn_result
+            else:
+                # Escalada: preguntar a ChatGPT si el LLM propio no pudo
+                logger.info("LLM propio no pudo resolver. Escalando a ChatGPT...")
+                chatgpt_result = self.learner.ask_chatgpt_for_help(
+                    user_input, failure_context=clean_response
+                )
+                if chatgpt_result and not chatgpt_result.startswith("Error"):
+                    clean_response = chatgpt_result
+
+        self.memory.save_message("assistant", clean_response)
+        return clean_response
 
     # ─── Evaluación inteligente de resultados ────────────────
 
@@ -411,93 +654,6 @@ class Orchestrator:
         if text_lower.startswith("error"):
             return True
         return any(phrase in text_lower for phrase in self._FAILURE_PHRASES)
-
-    # ─── Detección de peticiones conversacionales ──────────────
-
-    # Patrones que indican acción sobre el escritorio/sistema
-    _ACTION_INDICATORS_RE = re.compile(
-        r"(?:"
-        r"abre|abrir|abriendo|"               # abrir apps
-        r"entra\s+en|entra\s+a|ve\s+a|"       # navegar a sitios
-        r"escribe\s+(?:en|a|al)\b|"           # escribir en apps
-        r"env[ií]a|manda|"                    # enviar mensajes
-        r"busca\s+en\b|"                      # buscar en sitio específico
-        r"haz\s+clic|click|pulsa|"            # interacción UI
-        r"descarga|instala|desinstala|"       # instalar/descargar
-        r"crea\s+(?:un\s+)?(?:archivo|carpeta|documento)|"  # crear archivos
-        r"borra|elimina|mueve|copia|renombra|"  # file ops
-        r"sube\s+(?:el\s+)?volumen|baja\s+(?:el\s+)?volumen|"  # system
-        r"apaga|reinicia|cierra|minimiza|"    # system control
-        r"pon\s+(?:el\s+)?(?:volumen|brillo)|" # system control
-        r"reproduce|pausa|siguiente\s+canci[oó]n|" # media
-        r"whatsapp|whatsup"                   # mensajería específica
-        r")",
-        re.IGNORECASE,
-    )
-
-    # Patrones que indican petición conversacional (responder con LLM)
-    _CONVERSATIONAL_RE = re.compile(
-        r"(?:"
-        r"cu[eé]ntame|cu[eé]ntanos|"          # cuéntame un chiste/historia
-        r"dime\s+(?:un|una|algo)|"             # dime un chiste / dime algo
-        r"qu[eé]\s+(?:opinas|piensas|crees)|"  # qué opinas de...
-        r"recomiendas|aconsejas|sugieres|"     # recomiendas...
-        r"explic[aá]me|"                       # explícame qué es...
-        r"qu[eé]\s+(?:es|son|significa)|"      # qué es X
-        r"c[oó]mo\s+(?:se\s+dice|funciona|es)|"  # cómo funciona X
-        r"por\s*qu[eé]\s|"                     # por qué...
-        r"cu[aá]l\s+es\s+(?:tu|la\s+diferencia)|"  # cuál es tu...
-        r"sab[eéi][as]s?\s+(?:qu[eé]|algo|si|cu[aá]ndo)|"  # sabes qué/algo/si
-        r"h[aá]blame\s+(?:de|sobre)|"          # háblame de...
-        r"chiste|broma|historia\s+graciosa|"   # humor
-        r"opini[oó]n|consejo|"                 # opinión/consejo
-        r"canta|canci[oó]n\s+(?:que|favorita)|"  # entretenimiento
-        r"qui[eé]n\s+(?:es|fue|invent[oó])|"  # quién es X
-        r"cu[aá]ndo\s+(?:fue|naci[oó]|se\s+cre[oó])|"  # cuándo...
-        r"d[oó]nde\s+(?:est[aá]|queda|naci[oó])|"  # dónde está X (info)
-        r"cu[aá]nto\s+(?:es|mide|pesa|vale|cuesta)|"  # cuánto es X
-        r"que\s+(?:hora|d[ií]a|fecha)\s+es|"   # qué hora es (handled by local too)
-        r"escribe\s+(?:un|una)\s+(?:poema|verso|carta|redacci[oó]n|ensayo|texto)" # escritura creativa
-        r")",
-        re.IGNORECASE,
-    )
-
-    def _is_conversational(self, text: str) -> bool:
-        """
-        Detecta si la petición del usuario es CONVERSACIONAL (el LLM
-        puede responder directamente sin interactuar con la pantalla).
-
-        Ejemplos conversacionales:
-        - "cuéntame un chiste"
-        - "qué opinas de los coches eléctricos"
-        - "recomiendas los juegos de azar"
-        - "explícame qué es la fotosíntesis"
-        - "quién inventó la bombilla"
-        - "escribe un poema sobre el mar"
-
-        Ejemplos que NO son conversacionales (requieren acción):
-        - "abre google"
-        - "entra en whatsapp y escribe hola"
-        - "busca en aules mis tareas"
-        - "baja el volumen"
-        """
-        text_lower = text.lower().strip()
-
-        # Si contiene indicadores claros de acción sobre el sistema, NO es conversacional
-        if self._ACTION_INDICATORS_RE.search(text_lower):
-            return False
-
-        # Si encaja con patrones conversacionales, SÍ
-        if self._CONVERSATIONAL_RE.search(text_lower):
-            return True
-
-        # Heurística: preguntas simples sin verbo de acción (¿...?)
-        if text_lower.startswith("¿") or text_lower.endswith("?"):
-            # Es una pregunta — si no tiene indicador de acción, es conversacional
-            if not self._ACTION_INDICATORS_RE.search(text_lower):
-                return True
-
-        return False
 
     # ─── Detección de texto explicativo ──────────────────────
 
@@ -1259,8 +1415,7 @@ class Orchestrator:
                 subprocess.run(
                     ["powershell", "-ExecutionPolicy", "Bypass", "-command",
                      "Set-Clipboard -Value $null"],
-                    capture_output=True, text=True, timeout=3,
-                    startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
+                    capture_output=True, text=True, timeout=3
                 )
             except Exception:
                 pass
@@ -1287,8 +1442,7 @@ class Orchestrator:
                 # Leer el portapapeles
                 clip_result = subprocess.run(
                     ["powershell", "-ExecutionPolicy", "Bypass", "-command", "Get-Clipboard"],
-                    capture_output=True, text=True, timeout=5,
-                    startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
+                    capture_output=True, text=True, timeout=5
                 )
                 clipboard_text = clip_result.stdout.strip()
                 logger.info(f"Portapapeles (Ctrl+A+C): {len(clipboard_text)} chars")
@@ -1481,8 +1635,7 @@ class Orchestrator:
             import subprocess
             clip_result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-command", "Get-Clipboard"],
-                capture_output=True, text=True, timeout=5,
-                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
+                capture_output=True, text=True, timeout=5
             )
             current_text = clip_result.stdout.strip()
             
@@ -1654,8 +1807,7 @@ class Orchestrator:
 
             clip_result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-command", "Get-Clipboard"],
-                capture_output=True, text=True, timeout=5,
-                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
+                capture_output=True, text=True, timeout=5
             )
             url = clip_result.stdout.strip()
             logger.info(f"URL de la barra de direcciones: {url[:150]}")

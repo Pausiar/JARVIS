@@ -99,12 +99,12 @@ class MessageBubble(QFrame):
         layout.addWidget(sender_label)
 
         # Contenido del mensaje
-        content_label = QLabel(text)
-        content_label.setObjectName("messageLabel")
-        content_label.setWordWrap(True)
-        content_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        content_label.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 13px;")
-        layout.addWidget(content_label)
+        self.content_label = QLabel(text)
+        self.content_label.setObjectName("messageLabel")
+        self.content_label.setWordWrap(True)
+        self.content_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.content_label.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 13px;")
+        layout.addWidget(self.content_label)
 
         # Estilos de la burbuja
         if is_user:
@@ -127,6 +127,19 @@ class MessageBubble(QFrame):
             """)
 
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+
+    def set_text(self, text: str):
+        """Actualiza el texto de la burbuja."""
+        self.content_label.setText(text)
+
+    def append_text(self, text: str):
+        """Añade texto al contenido actual de la burbuja."""
+        current = self.content_label.text()
+        self.content_label.setText(current + text)
+
+    def get_text(self) -> str:
+        """Devuelve el texto actual de la burbuja."""
+        return self.content_label.text()
 
 
 class SystemMetricWidget(QWidget):

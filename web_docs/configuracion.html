@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configuración — J.A.R.V.I.S.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══ TOPBAR ═══ -->
+<header class="topbar">
+  <button class="hamburger" aria-label="Menú">☰</button>
+  <div class="topbar-brand">
+    <div class="logo"></div>
+    <h1>J.A.R.V.I.S.</h1>
+    <span>Sistema de Ayuda</span>
+  </div>
+  <div class="topbar-search">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Buscar en la ayuda..." autocomplete="off">
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <nav class="topbar-nav">
+    <a href="index.html">🏠 Inicio</a>
+    <a href="indice.html">📑 Índice</a>
+  </nav>
+</header>
+
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sidebar">
+  <a href="index.html" class="sidebar-link-direct">🏠 Inicio</a>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 📘 Introducción</div>
+    <ul class="sidebar-links">
+      <li><a href="introduccion.html">¿Qué es J.A.R.V.I.S.?</a></li>
+      <li><a href="introduccion.html#caracteristicas">Características</a></li>
+      <li><a href="introduccion.html#requisitos">Requisitos del sistema</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🚀 Primeros pasos</div>
+    <ul class="sidebar-links">
+      <li><a href="instalacion.html">Instalación</a></li>
+      <li><a href="interfaz.html">Primera ejecución</a></li>
+      <li><a href="interfaz.html#configuracion-inicial">Configuración inicial</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> ⚙️ Funciones principales</div>
+    <ul class="sidebar-links">
+      <li><a href="comandos.html">Catálogo de comandos</a></li>
+      <li><a href="comandos.html#sistema">Control del sistema</a></li>
+      <li><a href="comandos.html#ventanas">Ventanas y pestañas</a></li>
+      <li><a href="comandos.html#web">Navegación web</a></li>
+      <li><a href="comandos.html#archivos">Gestión de archivos</a></li>
+      <li><a href="comandos.html#documentos">Documentos</a></li>
+      <li><a href="comandos.html#automatizacion">Automatización</a></li>
+      <li><a href="comandos.html#multimedia">Multimedia</a></li>
+      <li><a href="comandos.html#email">Email</a></li>
+      <li><a href="ocr.html">Interacción visual (OCR)</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section open">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🔧 Configuración</div>
+    <ul class="sidebar-links">
+      <li><a href="configuracion.html" class="current">Archivo config.py</a></li>
+      <li><a href="configuracion.html#modo">Modo local vs. cloud</a></li>
+      <li><a href="configuracion.html#apikey">API Keys</a></li>
+      <li><a href="configuracion.html#plugins">Plugins</a></li>
+      <li><a href="configuracion.html#memoria">Memoria y aprendizaje</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> ❌ Resolución de problemas</div>
+    <ul class="sidebar-links">
+      <li><a href="problemas.html#ollama">Ollama no disponible</a></li>
+      <li><a href="problemas.html#apps">No abre aplicaciones</a></li>
+      <li><a href="problemas.html#voz">Voz y micrófono</a></li>
+      <li><a href="problemas.html#ocr">OCR / Clic incorrecto</a></li>
+      <li><a href="problemas.html#faq">Preguntas frecuentes</a></li>
+    </ul>
+  </div>
+
+  <a href="indice.html" class="sidebar-link-direct">📑 Índice alfabético</a>
+</aside>
+
+<!-- ═══ MAIN CONTENT ═══ -->
+<main class="main">
+
+  <div class="breadcrumb">
+    <a href="index.html">Inicio</a> <span class="sep">›</span> Configuración
+  </div>
+
+  <h1>🔧 Configuración</h1>
+  <p>JARVIS se configura mediante el archivo <code>config.py</code> en la raíz del proyecto. Todos los parámetros están documentados con comentarios y no requieren conocimientos avanzados para personalizarlos.</p>
+
+  <!-- ── config.py overview ── -->
+  <h2 id="archivo">Archivo config.py — Visión general</h2>
+
+  <p>El archivo se divide en secciones lógicas. A continuación se muestran los parámetros más importantes:</p>
+
+  <table class="key-table">
+    <thead>
+      <tr><th>Sección</th><th>Parámetro</th><th>Valor por defecto</th><th>Descripción</th></tr>
+    </thead>
+    <tbody>
+      <tr><td rowspan="3">🧠 <strong>IA / LLM</strong></td>
+          <td><code>BRAIN_MODE</code></td><td><code>"cloud"</code></td>
+          <td>Modo de ejecución: <strong>"local"</strong> (Ollama en tu PC) o <strong>"cloud"</strong> (APIs cloud gratuitas)</td></tr>
+      <tr><td><code>CLOUD_PROVIDER</code></td><td><code>"github"</code></td>
+          <td>Proveedor cloud activo: <strong>"github"</strong> (GPT-4o-mini) o <strong>"gemini"</strong> (Gemini 2.0 Flash)</td></tr>
+      <tr><td><code>OLLAMA_MODEL</code></td><td><code>"mistral"</code></td>
+          <td>Modelo Ollama local. Opciones: <code>mistral</code>, <code>llama3</code>, <code>phi3</code></td></tr>
+
+      <tr><td rowspan="2">☁️ <strong>GitHub Models</strong></td>
+          <td><code>GITHUB_TOKEN</code></td><td><code>""</code></td>
+          <td>Token de acceso personal de GitHub (<a href="https://github.com/settings/tokens" target="_blank">obtener aquí</a>)</td></tr>
+      <tr><td><code>GITHUB_MODEL</code></td><td><code>"gpt-4o-mini"</code></td>
+          <td>Modelo de GitHub Models. GPT-4o-mini: rápido, 20.000 req/día gratis</td></tr>
+
+      <tr><td rowspan="2">✨ <strong>Google Gemini</strong></td>
+          <td><code>GEMINI_API_KEY</code></td><td><code>""</code></td>
+          <td>Clave API de Gemini (<a href="https://aistudio.google.com/apikey" target="_blank">obtener aquí</a>)</td></tr>
+      <tr><td><code>GEMINI_MODEL</code></td><td><code>"gemini-2.0-flash"</code></td>
+          <td>Modelo Gemini. 2.0 Flash: gratuito con límites generosos</td></tr>
+
+      <tr><td rowspan="2">👁️ <strong>Visión</strong></td>
+          <td><code>VISION_MODEL</code></td><td><code>"llava"</code></td>
+          <td>Modelo multimodal para describir imágenes. Opciones: <code>llava</code>, <code>bakllava</code>, <code>llava-phi3</code></td></tr>
+      <tr><td><code>VISION_ENABLED</code></td><td><code>True</code></td>
+          <td>Activa o desactiva la capacidad de describir pantalla/fotos</td></tr>
+
+      <tr><td rowspan="4">🎙️ <strong>Voz (STT)</strong></td>
+          <td><code>WHISPER_MODEL</code></td><td><code>"small"</code></td>
+          <td>Modelo Whisper para reconocimiento de voz. Opciones: <code>tiny</code>, <code>base</code>, <code>small</code>, <code>medium</code>, <code>large</code></td></tr>
+      <tr><td><code>WHISPER_LANGUAGE</code></td><td><code>"es"</code></td>
+          <td>Idioma forzado para transcripciones</td></tr>
+      <tr><td><code>WHISPER_DEVICE</code></td><td><code>"cpu"</code></td>
+          <td><code>"cpu"</code> o <code>"cuda"</code> (GPU Nvidia)</td></tr>
+      <tr><td><code>WHISPER_COMPUTE_TYPE</code></td><td><code>"int8"</code></td>
+          <td><code>"int8"</code> para CPU, <code>"float16"</code> para GPU</td></tr>
+
+      <tr><td rowspan="2">🔊 <strong>Voz (TTS)</strong></td>
+          <td><code>PIPER_VOICE</code></td><td><code>"es_ES-davefx-medium"</code></td>
+          <td>Voz de síntesis. Masculina en español, procesada localmente con Piper</td></tr>
+      <tr><td><code>TTS_ENABLED</code></td><td><code>True</code></td>
+          <td>Activar/desactivar la voz hablada de JARVIS</td></tr>
+
+      <tr><td rowspan="3">⌨️ <strong>Hotkeys</strong></td>
+          <td><code>WAKE_WORD</code></td><td><code>"jarvis"</code></td>
+          <td>Palabra clave para activar por voz (en modo escucha continua)</td></tr>
+      <tr><td><code>HOTKEY_ACTIVATE</code></td><td><code>"ctrl+shift+j"</code></td>
+          <td>Atajo de teclado para activar la entrada por voz</td></tr>
+      <tr><td><code>HOTKEY_MUTE</code></td><td><code>"ctrl+shift+m"</code></td>
+          <td>Atajo para silenciar/activar micrófono</td></tr>
+
+      <tr><td rowspan="4">🖥️ <strong>Interfaz (HUD)</strong></td>
+          <td><code>HUD_OPACITY</code></td><td><code>0.95</code></td>
+          <td>Transparencia de la ventana (0.0 – 1.0)</td></tr>
+      <tr><td><code>HUD_ALWAYS_ON_TOP</code></td><td><code>False</code></td>
+          <td>Mantener la ventana siempre visible</td></tr>
+      <tr><td><code>HUD_ACCENT_COLOR</code></td><td><code>"#00D4FF"</code></td>
+          <td>Color de acento del reactor arc (cyan)</td></tr>
+      <tr><td><code>HUD_FONT_FAMILY</code></td><td><code>"JetBrains Mono"</code></td>
+          <td>Fuente principal de la interfaz</td></tr>
+
+      <tr><td rowspan="2">🔌 <strong>Plugins</strong></td>
+          <td><code>PLUGINS_ENABLED</code></td><td><code>True</code></td>
+          <td>Activar el sistema de plugins</td></tr>
+      <tr><td><code>PLUGINS_HOT_RELOAD</code></td><td><code>True</code></td>
+          <td>Recargar plugins automáticamente al modificar los archivos</td></tr>
+
+      <tr><td>⏱️ <strong>Código</strong></td>
+          <td><code>CODE_EXEC_TIMEOUT</code></td><td><code>30</code></td>
+          <td>Timeout máximo en segundos para ejecución de código Python en sandbox</td></tr>
+    </tbody>
+  </table>
+
+
+  <!-- ── Modo local vs cloud ── -->
+  <h2 id="modo">🧠 Modo Local vs. Cloud</h2>
+
+  <p>JARVIS tiene un <strong>cerebro dual</strong>: puede funcionar con IA local en tu PC o conectándose a APIs cloud gratuitas. El parámetro <code>BRAIN_MODE</code> en <code>config.py</code> controla qué modo usar.</p>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin:1.5rem 0;">
+
+    <div class="callout info" style="margin:0;">
+      <h4>💻 Modo Local (<code>BRAIN_MODE = "local"</code>)</h4>
+      <ul>
+        <li>Usa <strong>Ollama</strong> con modelos como Mistral, LLaMA 3 o Phi-3</li>
+        <li>Todo se procesa en tu PC — <strong>sin conexión a internet</strong></li>
+        <li>Privacidad total: los datos nunca salen de tu equipo</li>
+        <li>Requiere: ≥16 GB RAM, buena CPU (o GPU para ir más rápido)</li>
+        <li>Velocidad: depende de tu hardware</li>
+      </ul>
+    </div>
+
+    <div class="callout success" style="margin:0;">
+      <h4>☁️ Modo Cloud (<code>BRAIN_MODE = "cloud"</code>) — Recomendado</h4>
+      <ul>
+        <li>Usa APIs cloud externas, <strong>sin consumir recursos locales</strong></li>
+        <li>Mucho más rápido que Ollama en la mayoría de PCs</li>
+        <li>Requiere: conexión a internet + API key (gratuita)</li>
+        <li>Proveedores disponibles:
+          <ul>
+            <li><strong>GitHub Models</strong> — GPT-4o-mini (20.000 solicitudes/día gratis)</li>
+            <li><strong>Google Gemini</strong> — Gemini 2.0 Flash (límites muy generosos, gratis)</li>
+          </ul>
+        </li>
+        <li>Ideal para PCs con pocos recursos o portátiles</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <h3>Cómo cambiar de modo</h3>
+
+  <p>Puedes cambiar el modo de dos formas:</p>
+
+  <div class="step-box"><span class="step-num">Opción A</span>
+    Editar <code>config.py</code> directamente:
+    <pre><code># Para usar cloud (recomendado):
+BRAIN_MODE = "cloud"
+CLOUD_PROVIDER = "github"   # o "gemini"
+
+# Para usar local:
+BRAIN_MODE = "local"
+OLLAMA_MODEL = "mistral"    # o "llama3", "phi3"</code></pre>
+  </div>
+
+  <div class="step-box"><span class="step-num">Opción B</span>
+    Usar comandos de voz/texto dentro de JARVIS:
+    <pre><code>"cambia al modo cloud"
+"cambia al modo local"
+"usa el proveedor gemini"
+"usa el proveedor github"</code></pre>
+  </div>
+
+
+  <h3>Comparativa de proveedores cloud</h3>
+
+  <table class="key-table">
+    <thead>
+      <tr><th>Característica</th><th>GitHub Models (GPT-4o-mini)</th><th>Google Gemini (2.0 Flash)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Modelo</strong></td><td>GPT-4o-mini</td><td>Gemini 2.0 Flash</td></tr>
+      <tr><td><strong>Coste</strong></td><td>Gratis (20K req/día)</td><td>Gratis (límites generosos)</td></tr>
+      <tr><td><strong>Velocidad</strong></td><td>⚡ Muy rápida</td><td>⚡ Muy rápida</td></tr>
+      <tr><td><strong>Calidad</strong></td><td>⭐⭐⭐⭐ Excelente</td><td>⭐⭐⭐⭐ Excelente</td></tr>
+      <tr><td><strong>Endpoint</strong></td><td><code>models.inference.ai.azure.com</code></td><td><code>generativelanguage.googleapis.com</code></td></tr>
+      <tr><td><strong>Obtener key</strong></td><td><a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a></td><td><a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a></td></tr>
+    </tbody>
+  </table>
+
+
+  <!-- ── API Keys ── -->
+  <h2 id="apikey">🔑 Configurar API Keys</h2>
+
+  <p>Las API keys son <strong>gratuitas</strong> y se necesitan solo si usas el modo cloud. Se guardan cifradas en <code>data/config.json</code>, nunca en el código fuente.</p>
+
+  <div class="callout warning">
+    <strong>Importante:</strong> Nunca compartas tus API keys ni las subas a GitHub. El archivo <code>data/config.json</code> debe estar en el <code>.gitignore</code>.
+  </div>
+
+  <h3>GitHub Models (GPT-4o-mini)</h3>
+
+  <div class="step-box"><span class="step-num">1</span>
+    Ve a <a href="https://github.com/settings/tokens" target="_blank"><strong>github.com/settings/tokens</strong></a> e inicia sesión.
+  </div>
+
+  <div class="step-box"><span class="step-num">2</span>
+    Crea un nuevo token clásico (<em>Generate new token → Classic</em>). No hace falta seleccionar scopes especiales — el acceso a GitHub Models es gratuito con cualquier token.
+  </div>
+
+  <div class="step-box"><span class="step-num">3</span>
+    Copia el token y díselo a JARVIS:
+    <pre><code>"configura api key github ghp_TuTokenAquí123456789"</code></pre>
+  </div>
+
+  <h3>Google Gemini (Gemini 2.0 Flash)</h3>
+
+  <div class="step-box"><span class="step-num">1</span>
+    Ve a <a href="https://aistudio.google.com/apikey" target="_blank"><strong>aistudio.google.com/apikey</strong></a> e inicia sesión con tu cuenta de Google.
+  </div>
+
+  <div class="step-box"><span class="step-num">2</span>
+    Haz clic en <strong>Create API Key</strong> y copia la clave generada.
+  </div>
+
+  <div class="step-box"><span class="step-num">3</span>
+    Díselo a JARVIS:
+    <pre><code>"configura api key gemini AIzaSy_TuKeyAquí123456789"</code></pre>
+  </div>
+
+  <div class="callout info">
+    <strong>Tip:</strong> Puedes cambiar de proveedor en cualquier momento con <code>"usa el proveedor github"</code> o <code>"usa el proveedor gemini"</code>. JARVIS cambiará al instante sin reiniciar.
+  </div>
+
+
+  <!-- ── Plugins ── -->
+  <h2 id="plugins">🔌 Sistema de Plugins</h2>
+
+  <p>JARVIS soporta un sistema de plugins que permite extender sus funcionalidades sin tocar el código base. Los plugins se colocan en la carpeta <code>plugins/</code>.</p>
+
+  <h3>Crear un plugin</h3>
+
+  <div class="step-box"><span class="step-num">1</span>
+    Crea un archivo Python en <code>plugins/</code>, por ejemplo <code>plugins/mi_plugin.py</code>.
+  </div>
+
+  <div class="step-box"><span class="step-num">2</span>
+    Define una función <code>register()</code> que devuelva un diccionario con los comandos del plugin:
+    <pre><code>def register():
+    return {
+        "nombre": "Mi Plugin",
+        "version": "1.0",
+        "comandos": {
+            "saludo especial": saludar,
+        }
+    }
+
+def saludar(params):
+    return "¡Hola desde mi plugin personalizado!"</code></pre>
+  </div>
+
+  <div class="step-box"><span class="step-num">3</span>
+    El plugin se carga automáticamente al iniciar JARVIS. Si <code>PLUGINS_HOT_RELOAD = True</code>, los cambios que hagas se detectan sin reiniciar.
+  </div>
+
+
+  <!-- ── Memoria ── -->
+  <h2 id="memoria">🧠 Memoria y Aprendizaje</h2>
+
+  <p>JARVIS tiene un sistema de memoria persistente y de aprendizaje que le permite mejorar con cada interacción.</p>
+
+  <h3>Memoria (SQLite)</h3>
+  <ul>
+    <li>Se almacena en <code>data/memory.db</code></li>
+    <li>Guarda el historial de conversaciones anteriores</li>
+    <li>Permite a JARVIS recordar preferencias del usuario</li>
+    <li>Ejemplo: <em>"recuerda que mi color favorito es el azul"</em> → JARVIS lo guarda y lo recuerda en futuras sesiones</li>
+  </ul>
+
+  <h3>Procedimientos aprendidos</h3>
+  <ul>
+    <li>Se guardan en <code>data/procedures.json</code></li>
+    <li>Cuando JARVIS completa una tarea autónoma con éxito (ej.: enviar un WhatsApp), guarda los pasos para ejecutarlos más rápido la próxima vez</li>
+    <li>Solo se guardan procedimientos que superan la <strong>validación de coherencia</strong> (los pasos deben corresponder al objetivo original)</li>
+    <li>Se pueden listar con <em>"qué procedimientos conoces"</em></li>
+  </ul>
+
+  <h3>Habilidades aprendidas</h3>
+  <ul>
+    <li>Se guardan en <code>data/learned_skills.json</code></li>
+    <li>Cuando JARVIS no sabe hacer algo, puede <strong>investigar autónomamente</strong> cómo hacerlo, generar código Python, probarlo y guardar la habilidad si funciona</li>
+    <li>Ejemplo: <em>"aprende a obtener el clima de mi ciudad"</em> → investiga APIs, genera código, lo prueba, y guarda la habilidad</li>
+    <li>Las habilidades se reutilizan automáticamente en futuras sesiones</li>
+    <li>Listar: <em>"qué has aprendido"</em> — Olvidar: <em>"olvida la habilidad X"</em></li>
+  </ul>
+
+  <h3>Archivos de datos</h3>
+
+  <table class="key-table">
+    <thead>
+      <tr><th>Archivo</th><th>Formato</th><th>Propósito</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>data/config.json</code></td><td>JSON</td><td>Configuración del usuario y API keys</td></tr>
+      <tr><td><code>data/memory.db</code></td><td>SQLite</td><td>Historial de conversaciones y recuerdos</td></tr>
+      <tr><td><code>data/procedures.json</code></td><td>JSON</td><td>Procedimientos autónomos aprendidos</td></tr>
+      <tr><td><code>data/learned_skills.json</code></td><td>JSON</td><td>Habilidades creadas por el motor de aprendizaje</td></tr>
+      <tr><td><code>data/research_log.json</code></td><td>JSON</td><td>Log de investigaciones del agente autónomo</td></tr>
+      <tr><td><code>data/logs/jarvis.log</code></td><td>Texto</td><td>Log del sistema para depuración</td></tr>
+    </tbody>
+  </table>
+
+
+  <!-- ═══ NAV ═══ -->
+  <div class="page-nav">
+    <a href="ocr.html" class="nav-prev">← Interacción visual (OCR)</a>
+    <a href="problemas.html" class="nav-next">Resolución de problemas →</a>
+  </div>
+
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>

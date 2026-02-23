@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Primera ejecución — J.A.R.V.I.S. Ayuda</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="hamburger" aria-label="Menú">☰</button>
+  <div class="topbar-brand"><div class="logo"></div><h1>J.A.R.V.I.S.</h1><span>Sistema de Ayuda</span></div>
+  <div class="topbar-search">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Buscar en la ayuda..." autocomplete="off">
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <nav class="topbar-nav"><a href="index.html">🏠 Inicio</a><a href="indice.html">📑 Índice</a></nav>
+</header>
+
+<aside class="sidebar">
+  <a href="index.html" class="sidebar-link-direct">🏠 Inicio</a>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 📘 Introducción</div>
+    <ul class="sidebar-links"><li><a href="introduccion.html">¿Qué es J.A.R.V.I.S.?</a></li></ul>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title open"><span class="arrow">▶</span> 🚀 Primeros pasos</div>
+    <ul class="sidebar-links">
+      <li><a href="instalacion.html">Instalación</a></li>
+      <li><a href="interfaz.html" class="current">Primera ejecución</a></li>
+      <li><a href="interfaz.html#configuracion-inicial">Configuración inicial</a></li>
+    </ul>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> ⚙️ Funciones principales</div>
+    <ul class="sidebar-links"><li><a href="comandos.html">Catálogo de comandos</a></li><li><a href="ocr.html">OCR</a></li></ul>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🔧 Configuración</div>
+    <ul class="sidebar-links"><li><a href="configuracion.html">config.py</a></li></ul>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> ❌ Problemas</div>
+    <ul class="sidebar-links"><li><a href="problemas.html">Problemas comunes</a></li></ul>
+  </div>
+  <a href="indice.html" class="sidebar-link-direct">📑 Índice alfabético</a>
+</aside>
+
+<main class="main">
+
+  <div class="breadcrumb">
+    <a href="index.html">Inicio</a> <span class="sep">›</span>
+    <a href="instalacion.html">Primeros pasos</a> <span class="sep">›</span>
+    <span class="current-crumb">Primera ejecución</span>
+  </div>
+
+  <h1>🖥️ Primera ejecución y la interfaz HUD</h1>
+
+  <p>Al ejecutar <code>python main.py</code>, se abre la ventana HUD (<em>Heads-Up Display</em>) de J.A.R.V.I.S. con el tema Arc Reactor.</p>
+
+  <h2 id="hud">La interfaz HUD</h2>
+
+  <p>La ventana principal tiene los siguientes elementos:</p>
+
+  <table>
+    <thead><tr><th>Elemento</th><th>Descripción</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Barra de título</strong></td><td>Muestra "J.A.R.V.I.S." con botones de minimizar, maximizar y cerrar</td></tr>
+      <tr><td><strong>Indicadores de estado</strong></td><td>Puntos de color que muestran el estado: <span style="color:#0099BB">●</span> idle, <span style="color:#4488FF">●</span> escuchando, <span style="color:#FFAA00">●</span> procesando, <span style="color:#44FF44">●</span> hablando</td></tr>
+      <tr><td><strong>Área de chat</strong></td><td>Muestra las burbujas de conversación (usuario a la izquierda, JARVIS a la derecha)</td></tr>
+      <tr><td><strong>Métricas del sistema</strong></td><td>CPU, RAM, disco — visibles en la parte superior</td></tr>
+      <tr><td><strong>Barra de entrada</strong></td><td>Campo de texto para escribir comandos + botón de micrófono 🎙️</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Atajos de teclado</h3>
+  <table>
+    <thead><tr><th>Atajo</th><th>Acción</th></tr></thead>
+    <tbody>
+      <tr><td><code>Ctrl+Shift+J</code></td><td>Mostrar/ocultar JARVIS desde cualquier sitio</td></tr>
+      <tr><td><code>Enter</code></td><td>Enviar mensaje</td></tr>
+      <tr><td><code>Ctrl+M</code></td><td>Silenciar/activar micrófono</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Tu primer comando</h2>
+  <p>Escribe en la barra de texto o pulsa el micrófono y di:</p>
+  <pre><code>Hola JARVIS</code></pre>
+  <p>JARVIS responderá con un saludo personalizado. Prueba también:</p>
+  <ul>
+    <li><code>¿Qué hora es?</code> — te dirá la hora actual</li>
+    <li><code>Abre Chrome</code> — abrirá Google Chrome</li>
+    <li><code>Busca recetas de pasta</code> — buscará en Google</li>
+    <li><code>Cuéntame un chiste</code> — respuesta conversacional de la IA</li>
+  </ul>
+
+  <div class="callout callout-info">
+    <div class="callout-title">💡 Consejo</div>
+    <p>Consulte el <a href="comandos.html">catálogo completo de comandos</a> para ver todo lo que JARVIS puede hacer.</p>
+  </div>
+
+  <h2 id="configuracion-inicial">Configuración inicial</h2>
+
+  <h3>Modo local vs. cloud</h3>
+  <p>JARVIS tiene un <strong>cerebro dual</strong> que puede funcionar con IA en tu PC o conectándose a APIs cloud gratuitas:</p>
+
+  <table>
+    <thead><tr><th>Modo</th><th>Proveedor / Modelo</th><th>Ventajas</th><th>Requisitos</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Local</strong></td><td>Ollama (Mistral, LLaMA 3, Phi-3)</td><td>100% privado, sin internet</td><td>RAM 8 GB+, modelo (~4 GB)</td></tr>
+      <tr><td rowspan="2"><strong>Cloud</strong> ⭐</td><td>GitHub Models (<strong>GPT-4o-mini</strong>)</td><td>Muy rápido, 20K req/día gratis</td><td>Internet + token GitHub</td></tr>
+      <tr><td>Google Gemini (<strong>2.0 Flash</strong>)</td><td>Gratis, límites generosos</td><td>Internet + API key Google</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout info">
+    <strong>Recomendación:</strong> El modo <strong>cloud</strong> es la mejor opción para la mayoría de usuarios. Usa modelos de IA de última generación (GPT-4o-mini, Gemini) sin consumir recursos de tu PC. La configuración por defecto ya viene en modo cloud con GitHub Models.
+  </div>
+
+  <p>Para cambiar de modo o proveedor, edite <code>BRAIN_MODE</code> y <code>CLOUD_PROVIDER</code> en <code>config.py</code>, o simplemente dile a JARVIS: <em>"cambia al modo local"</em> / <em>"usa el proveedor gemini"</em>. Vea <a href="configuracion.html#modo">Configuración avanzada</a>.</p>
+
+  <h3>Configurar API Key por voz</h3>
+  <p>La forma más fácil de configurar una API Key es decirle a JARVIS:</p>
+  <pre><code>configura api key github TU_CLAVE_AQUI</code></pre>
+  <p>O para Gemini:</p>
+  <pre><code>configura api key gemini TU_CLAVE_AQUI</code></pre>
+  <p>Para más detalles, vea <a href="configuracion.html#apikey">Configuración → API Keys</a>.</p>
+
+  <div class="page-nav">
+    <a href="instalacion.html"><span><span class="nav-label">Anterior</span><span class="nav-title">← Instalación</span></span></a>
+    <a href="comandos.html"><span><span class="nav-label">Siguiente</span><span class="nav-title">Catálogo de comandos →</span></span></a>
+  </div>
+
+</main>
+
+<div class="tip-bar">
+  <span class="tip-icon">💡</span>
+  Pulse <strong>Ctrl+Shift+J</strong> para mostrar JARVIS desde cualquier aplicación.
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

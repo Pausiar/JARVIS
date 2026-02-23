@@ -4,6 +4,7 @@ Síntesis de voz usando Piper TTS o pyttsx3 como fallback.
 """
 
 import logging
+import os
 import subprocess
 import threading
 import tempfile
@@ -13,6 +14,15 @@ from typing import Optional, Callable
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# ─── Helper: ocultar consolas en subprocess (.pyw) ────────
+_STARTUPINFO = None
+_CREATION_FLAGS = 0
+if os.name == 'nt':
+    _STARTUPINFO = subprocess.STARTUPINFO()
+    _STARTUPINFO.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    _STARTUPINFO.wShowWindow = 0
+    _CREATION_FLAGS = subprocess.CREATE_NO_WINDOW
 
 from config import (
     PIPER_MODEL_PATH,
@@ -204,6 +214,7 @@ class VoiceOutput:
                     stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
+                    startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
                 )
                 process.communicate(input=text.encode("utf-8"), timeout=30)
 
@@ -257,6 +268,7 @@ class VoiceOutput:
                          f"(New-Object Media.SoundPlayer '{file_path}').PlaySync()"],
                         timeout=60,
                         capture_output=True,
+                        startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
                     )
             except Exception as e:
                 logger.error(f"Error reproduciendo audio: {e}")

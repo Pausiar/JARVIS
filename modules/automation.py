@@ -225,6 +225,14 @@ class AutomationManager:
         """
         try:
             import subprocess
+            import os as _os
+            _si = None
+            _cf = 0
+            if _os.name == 'nt':
+                _si = subprocess.STARTUPINFO()
+                _si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                _si.wShowWindow = 0
+                _cf = subprocess.CREATE_NO_WINDOW
             result = subprocess.run(
                 [
                     "schtasks", "/create",
@@ -237,6 +245,7 @@ class AutomationManager:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                startupinfo=_si, creationflags=_cf,
             )
             if result.returncode == 0:
                 return f"Tarea '{name}' programada para las {time_str}."

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Índice Alfabético — J.A.R.V.I.S.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══ TOPBAR ═══ -->
+<header class="topbar">
+  <button class="hamburger" aria-label="Menú">☰</button>
+  <div class="topbar-brand">
+    <div class="logo"></div>
+    <h1>J.A.R.V.I.S.</h1>
+    <span>Sistema de Ayuda</span>
+  </div>
+  <div class="topbar-search">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Buscar en la ayuda..." autocomplete="off">
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <nav class="topbar-nav">
+    <a href="index.html">🏠 Inicio</a>
+    <a href="indice.html" class="active">📑 Índice</a>
+  </nav>
+</header>
+
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sidebar">
+  <a href="index.html" class="sidebar-link-direct">🏠 Inicio</a>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 📘 Introducción</div>
+    <ul class="sidebar-links">
+      <li><a href="introduccion.html">¿Qué es J.A.R.V.I.S.?</a></li>
+      <li><a href="introduccion.html#caracteristicas">Características</a></li>
+      <li><a href="introduccion.html#requisitos">Requisitos del sistema</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🚀 Primeros pasos</div>
+    <ul class="sidebar-links">
+      <li><a href="instalacion.html">Instalación</a></li>
+      <li><a href="interfaz.html">Primera ejecución</a></li>
+      <li><a href="interfaz.html#configuracion-inicial">Configuración inicial</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> ⚙️ Funciones principales</div>
+    <ul class="sidebar-links">
+      <li><a href="comandos.html">Catálogo de comandos</a></li>
+      <li><a href="comandos.html#sistema">Control del sistema</a></li>
+      <li><a href="comandos.html#ventanas">Ventanas y pestañas</a></li>
+      <li><a href="comandos.html#web">Navegación web</a></li>
+      <li><a href="comandos.html#archivos">Gestión de archivos</a></li>
+      <li><a href="comandos.html#documentos">Documentos</a></li>
+      <li><a href="comandos.html#automatizacion">Automatización</a></li>
+      <li><a href="comandos.html#multimedia">Multimedia</a></li>
+      <li><a href="comandos.html#email">Email</a></li>
+      <li><a href="ocr.html">Interacción visual (OCR)</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🔧 Configuración</div>
+    <ul class="sidebar-links">
+      <li><a href="configuracion.html">Archivo config.py</a></li>
+      <li><a href="configuracion.html#modo">Modo local vs. cloud</a></li>
+      <li><a href="configuracion.html#apikey">API Keys</a></li>
+      <li><a href="configuracion.html#plugins">Plugins</a></li>
+      <li><a href="configuracion.html#memoria">Memoria y aprendizaje</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> ❌ Resolución de problemas</div>
+    <ul class="sidebar-links">
+      <li><a href="problemas.html#ollama">Ollama no disponible</a></li>
+      <li><a href="problemas.html#apps">No abre aplicaciones</a></li>
+      <li><a href="problemas.html#voz">Voz y micrófono</a></li>
+      <li><a href="problemas.html#ocr">OCR / Clic incorrecto</a></li>
+      <li><a href="problemas.html#faq">Preguntas frecuentes</a></li>
+    </ul>
+  </div>
+
+  <a href="indice.html" class="sidebar-link-direct current">📑 Índice alfabético</a>
+</aside>
+
+<!-- ═══ MAIN CONTENT ═══ -->
+<main class="main">
+
+  <div class="breadcrumb">
+    <a href="index.html">Inicio</a> <span class="sep">›</span> Índice alfabético
+  </div>
+
+  <h1>📑 Índice Alfabético</h1>
+  <p>Referencia rápida de todos los conceptos, módulos y funciones de JARVIS organizados alfabéticamente.</p>
+
+  <div class="index-nav">
+    <a href="#A">A</a> <a href="#B">B</a> <a href="#C">C</a> <a href="#D">D</a>
+    <a href="#E">E</a> <a href="#F">F</a> <a href="#G">G</a> <a href="#H">H</a>
+    <a href="#I">I</a> <span class="disabled">J</span> <span class="disabled">K</span>
+    <a href="#L">L</a> <a href="#M">M</a> <a href="#N">N</a> <a href="#O">O</a>
+    <a href="#P">P</a> <span class="disabled">Q</span> <a href="#R">R</a>
+    <a href="#S">S</a> <a href="#T">T</a> <span class="disabled">U</span>
+    <a href="#V">V</a> <a href="#W">W</a> <span class="disabled">X</span>
+    <span class="disabled">Y</span> <span class="disabled">Z</span>
+  </div>
+
+
+  <!-- A -->
+  <h2 id="A" class="index-letter">A</h2>
+  <ul class="index-list">
+    <li><strong>Agente autónomo</strong> — <a href="ocr.html#agente">Cómo funciona el agente</a> · <a href="configuracion.html#memoria">Memoria y aprendizaje</a></li>
+    <li><strong>API Keys</strong> — <a href="configuracion.html#apikey">Configurar API Keys</a> · <a href="problemas.html#cloud-errors">Errores de API</a></li>
+    <li><strong>Aprendizaje automático</strong> — <a href="configuracion.html#memoria">Habilidades aprendidas</a></li>
+    <li><strong>Archivos, gestión de</strong> — <a href="comandos.html#archivos">Comandos de archivos</a></li>
+    <li><strong>Automatización</strong> — <a href="comandos.html#automatizacion">Captura, portapapeles, temporizador</a></li>
+  </ul>
+
+  <!-- B -->
+  <h2 id="B" class="index-letter">B</h2>
+  <ul class="index-list">
+    <li><strong>BRAIN_MODE</strong> — <a href="configuracion.html#modo">Local vs. Cloud</a> · <a href="configuracion.html#archivo">Tabla de parámetros</a></li>
+    <li><strong>Brillo</strong> — <a href="comandos.html#sistema">Control del sistema</a></li>
+  </ul>
+
+  <!-- C -->
+  <h2 id="C" class="index-letter">C</h2>
+  <ul class="index-list">
+    <li><strong>Calendario</strong> — <a href="comandos.html#automatizacion">Comandos de automatización</a></li>
+    <li><strong>click_on_text</strong> — <a href="ocr.html">Estrategias de clic</a> · <a href="ocr.html#doble-clic">Doble clic automático</a></li>
+    <li><strong>Cloud, modo</strong> — <a href="configuracion.html#modo">Local vs. Cloud</a> · <a href="introduccion.html">¿Qué es JARVIS?</a></li>
+    <li><strong>CLOUD_PROVIDER</strong> — <a href="configuracion.html#modo">Comparativa de proveedores</a></li>
+    <li><strong>Código, ejecución de</strong> — <a href="comandos.html#automatizacion">Sandbox de código</a> · <a href="problemas.html#faq">FAQ</a></li>
+    <li><strong>Comandos</strong> — <a href="comandos.html">Catálogo completo</a></li>
+    <li><strong>config.json</strong> — <a href="configuracion.html#memoria">Archivos de datos</a></li>
+    <li><strong>config.py</strong> — <a href="configuracion.html#archivo">Visión general</a></li>
+    <li><strong>Ctrl+Shift+J</strong> — <a href="interfaz.html#atajos">Atajos de teclado</a> · <a href="problemas.html#voz">Problemas de voz</a></li>
+  </ul>
+
+  <!-- D -->
+  <h2 id="D" class="index-letter">D</h2>
+  <ul class="index-list">
+    <li><strong>Doble clic</strong> — <a href="ocr.html#doble-clic">Detección automática</a></li>
+    <li><strong>Documentos</strong> — <a href="comandos.html#documentos">Leer/resumir PDF, Word, Excel</a></li>
+  </ul>
+
+  <!-- E -->
+  <h2 id="E" class="index-letter">E</h2>
+  <ul class="index-list">
+    <li><strong>Email</strong> — <a href="comandos.html#email">Enviar correos</a> · <a href="configuracion.html#archivo">SMTP config</a></li>
+    <li><strong>Ejercicios, resolver</strong> — <a href="ocr.html#agente">Agente autónomo</a> · <a href="comandos.html#documentos">Documentos</a></li>
+  </ul>
+
+  <!-- F -->
+  <h2 id="F" class="index-letter">F</h2>
+  <ul class="index-list">
+    <li><strong>FAQ</strong> — <a href="problemas.html#faq">Preguntas frecuentes</a></li>
+  </ul>
+
+  <!-- G -->
+  <h2 id="G" class="index-letter">G</h2>
+  <ul class="index-list">
+    <li><strong>Gemini (Google)</strong> — <a href="configuracion.html#modo">Modo Cloud</a> · <a href="configuracion.html#apikey">Obtener API Key</a></li>
+    <li><strong>GitHub Models</strong> — <a href="configuracion.html#modo">Modo Cloud</a> · <a href="configuracion.html#apikey">Obtener token</a></li>
+    <li><strong>GPT-4o-mini</strong> — <a href="configuracion.html#modo">Comparativa de proveedores</a> · <a href="introduccion.html">Descripción</a></li>
+  </ul>
+
+  <!-- H -->
+  <h2 id="H" class="index-letter">H</h2>
+  <ul class="index-list">
+    <li><strong>Habilidades</strong> — <a href="configuracion.html#memoria">Habilidades aprendidas</a></li>
+    <li><strong>Hotkeys</strong> — <a href="interfaz.html#atajos">Atajos de teclado</a> · <a href="configuracion.html#archivo">Tabla de parámetros</a></li>
+    <li><strong>HUD (interfaz)</strong> — <a href="interfaz.html">Primera ejecución</a> · <a href="configuracion.html#archivo">Parámetros HUD</a></li>
+  </ul>
+
+  <!-- I -->
+  <h2 id="I" class="index-letter">I</h2>
+  <ul class="index-list">
+    <li><strong>Instalación</strong> — <a href="instalacion.html">Guía paso a paso</a></li>
+    <li><strong>Interfaz</strong> — <a href="interfaz.html">Primera ejecución y HUD</a></li>
+  </ul>
+
+  <!-- L -->
+  <h2 id="L" class="index-letter">L</h2>
+  <ul class="index-list">
+    <li><strong>learned_skills.json</strong> — <a href="configuracion.html#memoria">Archivos de datos</a></li>
+    <li><strong>Local, modo</strong> — <a href="configuracion.html#modo">Local vs. Cloud</a></li>
+  </ul>
+
+  <!-- M -->
+  <h2 id="M" class="index-letter">M</h2>
+  <ul class="index-list">
+    <li><strong>Memoria</strong> — <a href="configuracion.html#memoria">SQLite y procedimientos</a></li>
+    <li><strong>memory.db</strong> — <a href="configuracion.html#memoria">Archivos de datos</a></li>
+    <li><strong>Micrófono</strong> — <a href="problemas.html#voz">Problemas de voz</a> · <a href="interfaz.html#atajos">Ctrl+Shift+J</a></li>
+    <li><strong>Mistral</strong> — <a href="configuracion.html#modo">Modo local</a> · <a href="problemas.html#ollama">Ollama no disponible</a></li>
+    <li><strong>Multimedia</strong> — <a href="comandos.html#multimedia">Control de multimedia</a></li>
+  </ul>
+
+  <!-- N -->
+  <h2 id="N" class="index-letter">N</h2>
+  <ul class="index-list">
+    <li><strong>Navegación web</strong> — <a href="comandos.html#web">Comandos web</a> · <a href="ocr.html">Interacción visual</a></li>
+  </ul>
+
+  <!-- O -->
+  <h2 id="O" class="index-letter">O</h2>
+  <ul class="index-list">
+    <li><strong>OCR</strong> — <a href="ocr.html">Interacción visual</a> · <a href="problemas.html#ocr">Problemas OCR</a></li>
+    <li><strong>Ollama</strong> — <a href="configuracion.html#modo">Modo local</a> · <a href="problemas.html#ollama">Problemas Ollama</a> · <a href="instalacion.html">Instalación</a></li>
+  </ul>
+
+  <!-- P -->
+  <h2 id="P" class="index-letter">P</h2>
+  <ul class="index-list">
+    <li><strong>Piper TTS</strong> — <a href="configuracion.html#archivo">Tabla de parámetros</a> · <a href="problemas.html#voz">Problemas de voz</a></li>
+    <li><strong>Plugins</strong> — <a href="configuracion.html#plugins">Sistema de plugins</a></li>
+    <li><strong>Procedimientos</strong> — <a href="configuracion.html#memoria">Procedimientos aprendidos</a></li>
+    <li><strong>procedures.json</strong> — <a href="configuracion.html#memoria">Archivos de datos</a></li>
+    <li><strong>Python</strong> — <a href="instalacion.html">Instalación Python 3.10+</a> · <a href="introduccion.html#requisitos">Requisitos</a></li>
+  </ul>
+
+  <!-- R -->
+  <h2 id="R" class="index-letter">R</h2>
+  <ul class="index-list">
+    <li><strong>Requisitos del sistema</strong> — <a href="introduccion.html#requisitos">Hardware y software</a></li>
+  </ul>
+
+  <!-- S -->
+  <h2 id="S" class="index-letter">S</h2>
+  <ul class="index-list">
+    <li><strong>Sandbox de código</strong> — <a href="comandos.html#automatizacion">Ejecución de código</a> · <a href="problemas.html#faq">FAQ</a></li>
+    <li><strong>Sistema, control del</strong> — <a href="comandos.html#sistema">Volumen, brillo, apps</a></li>
+  </ul>
+
+  <!-- T -->
+  <h2 id="T" class="index-letter">T</h2>
+  <ul class="index-list">
+    <li><strong>Tesseract OCR</strong> — <a href="ocr.html">Motor OCR</a> · <a href="instalacion.html">Instalación</a></li>
+    <li><strong>TTS (Text-to-Speech)</strong> — <a href="configuracion.html#archivo">Piper TTS</a> · <a href="problemas.html#voz">Problemas</a></li>
+  </ul>
+
+  <!-- V -->
+  <h2 id="V" class="index-letter">V</h2>
+  <ul class="index-list">
+    <li><strong>Ventanas</strong> — <a href="comandos.html#ventanas">Gestión de ventanas y pestañas</a></li>
+    <li><strong>Visión (LLaVA)</strong> — <a href="configuracion.html#archivo">VISION_MODEL</a></li>
+    <li><strong>Volumen</strong> — <a href="comandos.html#sistema">Control del sistema</a></li>
+    <li><strong>Voz</strong> — <a href="interfaz.html#atajos">Activar por voz</a> · <a href="problemas.html#voz">Solución de problemas</a></li>
+  </ul>
+
+  <!-- W -->
+  <h2 id="W" class="index-letter">W</h2>
+  <ul class="index-list">
+    <li><strong>Wake word</strong> — <a href="configuracion.html#archivo">WAKE_WORD</a> · <a href="interfaz.html">Configuración inicial</a></li>
+    <li><strong>Whisper</strong> — <a href="configuracion.html#archivo">WHISPER_MODEL</a> · <a href="problemas.html#voz">Problemas de transcripción</a></li>
+  </ul>
+
+
+  <!-- ═══ NAV ═══ -->
+  <div class="page-nav">
+    <a href="problemas.html" class="nav-prev">← Resolución de problemas</a>
+    <a href="index.html" class="nav-next">Inicio →</a>
+  </div>
+
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>

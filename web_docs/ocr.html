@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interacción visual (OCR) — J.A.R.V.I.S. Ayuda</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="hamburger" aria-label="Menú">☰</button>
+  <div class="topbar-brand"><div class="logo"></div><h1>J.A.R.V.I.S.</h1><span>Sistema de Ayuda</span></div>
+  <div class="topbar-search">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Buscar en la ayuda..." autocomplete="off">
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <nav class="topbar-nav"><a href="index.html">🏠 Inicio</a><a href="indice.html">📑 Índice</a></nav>
+</header>
+
+<aside class="sidebar">
+  <a href="index.html" class="sidebar-link-direct">🏠 Inicio</a>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 📘 Introducción</div>
+    <ul class="sidebar-links"><li><a href="introduccion.html">¿Qué es J.A.R.V.I.S.?</a></li></ul>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🚀 Primeros pasos</div>
+    <ul class="sidebar-links"><li><a href="instalacion.html">Instalación</a></li><li><a href="interfaz.html">Primera ejecución</a></li></ul>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title open"><span class="arrow">▶</span> ⚙️ Funciones principales</div>
+    <ul class="sidebar-links">
+      <li><a href="comandos.html">Catálogo de comandos</a></li>
+      <li><a href="ocr.html" class="current">Interacción visual (OCR)</a></li>
+    </ul>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> 🔧 Configuración</div>
+    <ul class="sidebar-links"><li><a href="configuracion.html">config.py</a></li></ul>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title"><span class="arrow">▶</span> ❌ Problemas</div>
+    <ul class="sidebar-links"><li><a href="problemas.html#ocr">Problemas con OCR</a></li></ul>
+  </div>
+  <a href="indice.html" class="sidebar-link-direct">📑 Índice alfabético</a>
+</aside>
+
+<main class="main">
+
+  <div class="breadcrumb">
+    <a href="index.html">Inicio</a> <span class="sep">›</span>
+    <a href="comandos.html">Funciones principales</a> <span class="sep">›</span>
+    <span class="current-crumb">Interacción visual (OCR)</span>
+  </div>
+
+  <h1>👁️ Interacción visual (OCR)</h1>
+
+  <p>J.A.R.V.I.S. puede <strong>ver y leer la pantalla</strong> utilizando el motor OCR nativo de Windows (<code>Windows.Media.Ocr</code>). Esto le permite hacer clic en texto visible, leer contenido de cualquier aplicación e interactuar con la interfaz de forma autónoma.</p>
+
+  <h2 id="clic">Clic por texto en pantalla</h2>
+
+  <p>JARVIS busca el texto que usted indica en la pantalla y hace clic en él. Utiliza una estrategia escalonada:</p>
+
+  <div class="step">
+    <div class="step-number">1</div>
+    <div class="step-content">
+      <h4>Ctrl+F Highlight</h4>
+      <p>Usa Ctrl+F para buscar el texto. Detecta el resaltado naranja del navegador y hace clic en él. Funciona especialmente bien en Chrome.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">2</div>
+    <div class="step-content">
+      <h4>UI Automation</h4>
+      <p>Usa la API de Windows UI Automation para buscar elementos interactivos por nombre. Ideal para botones, menús y controles nativos.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">3</div>
+    <div class="step-content">
+      <h4>OCR (fallback)</h4>
+      <p>Captura la pantalla, extrae texto con OCR y calcula las coordenadas del texto buscado para hacer clic.</p>
+    </div>
+  </div>
+
+  <h3>Ejemplos de uso</h3>
+  <table>
+    <thead><tr><th>Comando</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td><code>Haz clic donde pone Configuración</code></td><td>Busca "Configuración" en pantalla y hace clic</td></tr>
+      <tr><td><code>Pulsa en el botón de enviar</code></td><td>Clic inteligente por descripción (usa LLM + OCR)</td></tr>
+      <tr><td><code>Entra en el primer resultado</code></td><td>Clic en el primer resultado de Google</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="doble-clic">Doble clic automático</h2>
+
+  <div class="callout callout-warning">
+    <div class="callout-title">⚠️ Clic simple vs. doble clic</div>
+    <p>En el <strong>Explorador de archivos</strong> y el <strong>escritorio de Windows</strong>, un clic simple solo <em>selecciona</em> el elemento. Para <strong>abrirlo</strong> se necesita <strong>doble clic</strong>.</p>
+  </div>
+
+  <p>JARVIS gestiona esto de forma inteligente:</p>
+  <ul>
+    <li>Si el agente autónomo planifica un <code>click_on_text</code> y la pantalla <strong>no cambia</strong> (el elemento solo se selecciona), JARVIS <strong>reintenta automáticamente con doble clic</strong>.</li>
+    <li>El agente IA también recibe instrucciones para usar <code>double_click</code> directamente cuando el contexto lo requiere (archivos, carpetas, iconos del escritorio).</li>
+  </ul>
+
+  <p>Si necesita forzar un doble clic manualmente:</p>
+  <pre><code>Haz doble clic en MiArchivo.pdf</code></pre>
+
+  <h2 id="lectura">Lectura de pantalla</h2>
+
+  <p>JARVIS puede leer todo el texto visible en la pantalla:</p>
+  <table>
+    <thead><tr><th>Comando</th><th>Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td><code>¿Qué hay en la pantalla?</code></td><td>Lee todo el texto visible con OCR</td></tr>
+      <tr><td><code>Lee la pantalla</code></td><td>Igual que arriba</td></tr>
+    </tbody>
+  </table>
+
+  <p>Esta capacidad es la base del <strong>agente autónomo</strong>: JARVIS lee la pantalla, planifica pasos y ejecuta acciones para completar tareas complejas de forma independiente.</p>
+
+  <h2 id="agente">El agente autónomo</h2>
+
+  <p>Para tareas complejas que requieren varios pasos, JARVIS activa su <strong>agente autónomo</strong>, alimentado por IA cloud (<strong>GPT-4o-mini</strong> vía GitHub Models o <strong>Gemini 2.0 Flash</strong>) que le da la inteligencia para planificar y razonar sobre cada paso:</p>
+
+  <ol>
+    <li><strong>Lee la pantalla</strong> (OCR) para entender el contexto actual</li>
+    <li><strong>Planifica</strong> una lista de pasos mecánicos con la IA cloud (abrir app, hacer clic, escribir…)</li>
+    <li><strong>Ejecuta</strong> cada paso secuencialmente, verificando tras cada acción que la pantalla cambió</li>
+    <li>Si algo falla, <strong>replanifica</strong> automáticamente con la nueva información de la pantalla</li>
+    <li>Si completa la tarea, <strong>guarda el procedimiento</strong> para ejecutarlo más rápido en el futuro</li>
+  </ol>
+
+  <h3>Ejemplos reales del agente autónomo</h3>
+  <ul>
+    <li>«Envía un WhatsApp a Alejandro diciendo hola» → abre WhatsApp Web, busca contacto, escribe y envía</li>
+    <li>«Mira el ejercicio 2 del PDF y resuélvelo en Word» → lee el PDF con OCR, razona la solución con IA, cambia a Word y escribe la respuesta</li>
+    <li>«Entra en Aules FP y sube la actividad del tema 6» → navega a Moodle, busca la asignatura, encuentra la entrega y sube el archivo</li>
+    <li>«Busca en Google cómo hacer X e instálalo» → abre Chrome, busca, lee resultados, ejecuta los pasos</li>
+  </ul>
+
+  <div class="callout callout-info">
+    <div class="callout-title">💡 Aprendizaje de procedimientos</div>
+    <p>Si una tarea multi-paso se completa con éxito, JARVIS la <strong>guarda como procedimiento</strong> para ejecutarla más rápido la próxima vez. Solo se guardan procedimientos que superan una validación de coherencia (los pasos deben corresponder al objetivo). Vea <a href="configuracion.html#memoria">Memoria y aprendizaje</a>.</p>
+  </div>
+
+  <p>Si el OCR no funciona correctamente, consulte <a href="problemas.html#ocr" class="xref">🔗 Resolución de problemas → OCR / Clic incorrecto</a>.</p>
+
+  <div class="page-nav">
+    <a href="comandos.html"><span><span class="nav-label">Anterior</span><span class="nav-title">← Catálogo de comandos</span></span></a>
+    <a href="configuracion.html"><span><span class="nav-label">Siguiente</span><span class="nav-title">Configuración →</span></span></a>
+  </div>
+
+</main>
+
+<div class="tip-bar">
+  <span class="tip-icon">💡</span>
+  El OCR funciona con el idioma es-ES de Windows. Verifique que está instalado en Configuración → Idioma.
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

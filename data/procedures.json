@@ -40,10 +40,9 @@
       }
     ],
     "site": "aules",
-    "times_used": 10,
+    "times_used": 11,
     "created_at": "2026-02-16 13:15"
   },
-
   {
     "description": "Resumen del documento PDF",
     "keywords": [
@@ -90,10 +89,9 @@
       }
     ],
     "site": "explorador de archivos",
-    "times_used": 1,
+    "times_used": 3,
     "created_at": "2026-02-19 09:29"
   },
-
   {
     "description": "Generar un icono que represente al usuario",
     "keywords": [
@@ -133,5 +131,272 @@
     "site": "chatgpt",
     "times_used": 0,
     "created_at": "2026-02-19 10:15"
+  },
+  {
+    "description": "jarvis abre google, entra en whatsup web y escribe hola al contacto Alejandro Hidalgo",
+    "keywords": [
+      "whatsup",
+      "escribe",
+      "hola",
+      "contacto",
+      "alejandro",
+      "hidalgo"
+    ],
+    "steps": [
+      {
+        "action": "open_application",
+        "params": {
+          "app_name": "chrome"
+        }
+      },
+      {
+        "action": "navigate_to_url",
+        "params": {
+          "url": "https://web.whatsapp.com/"
+        }
+      },
+      {
+        "action": "type_in_app",
+        "params": {
+          "text": "hola"
+        }
+      }
+    ],
+    "site": "",
+    "times_used": 3,
+    "created_at": "2026-02-19 10:42"
+  },
+  {
+    "description": "Abre youtube y busca videos de pausiarog",
+    "keywords": [
+      "youtube",
+      "videos",
+      "pausiarog"
+    ],
+    "steps": [
+      {
+        "action": "open_application",
+        "params": {
+          "app_name": "chrome"
+        }
+      },
+      {
+        "action": "navigate_to_url",
+        "params": {
+          "url": "https://www.youtube.com"
+        }
+      },
+      {
+        "action": "type_in_app",
+        "params": {
+          "text": "pausiarog"
+        }
+      },
+      {
+        "action": "press_key",
+        "params": {
+          "key": "enter"
+        }
+      }
+    ],
+    "site": "",
+    "times_used": 0,
+    "created_at": "2026-02-19 12:12"
+  },
+  {
+    "description": "abre el explorador de archivos, ves a descargas, busca el documento: Actividad 1_Tema 7.pdf , abrelo",
+    "keywords": [
+      "explorador",
+      "archivos",
+      "descargas",
+      "documento",
+      "actividad",
+      "1_tema",
+      "abrelo",
+      "resume"
+    ],
+    "steps": [
+      {
+        "action": "open_application",
+        "params": {
+          "app_name": "explorer"
+        }
+      },
+      {
+        "action": "click_on_text",
+        "params": {
+          "text": "Descargas"
+        }
+      },
+      {
+        "action": "search_in_page",
+        "params": {
+          "text": "Actividad 1_Tema 7.pdf"
+        }
+      },
+      {
+        "action": "double_click",
+        "params": {
+          "text": "Actividad 1_Tema 7.pdf"
+        }
+      }
+    ],
+    "site": "",
+    "times_used": 2,
+    "created_at": "2026-02-19 12:32"
+  },
+  {
+    "description": "Contar un chiste diferente",
+    "keywords": [
+      "chiste",
+      "humor"
+    ],
+    "steps": [
+      {
+        "action": "type_in_app",
+        "params": {
+          "text": "cuéntame otro chiste diferente"
+        }
+      },
+      {
+        "action": "wait",
+        "params": {
+          "seconds": 2
+        }
+      }
+    ],
+    "site": "Jarvis",
+    "times_used": 0,
+    "created_at": "2026-02-20 10:09"
+  },
+  {
+    "description": "Contar un chiste",
+    "keywords": [
+      "chiste",
+      "humor",
+      "entretenimiento"
+    ],
+    "steps": [
+      {
+        "action": "navigate_to_url",
+        "params": {
+          "url": "https://chatgpt.com/"
+        }
+      },
+      {
+        "action": "type_in_app",
+        "params": {
+          "text": "cuéntame un chiste"
+        }
+      },
+      {
+        "action": "press_key",
+        "params": {
+          "key": "enter"
+        }
+      }
+    ],
+    "site": "chatgpt.com",
+    "times_used": 0,
+    "created_at": "2026-02-20 10:09"
+  },
+  {
+    "description": "Contar un chiste utilizando ChatGPT",
+    "keywords": [
+      "chiste",
+      "ChatGPT",
+      "entretenimiento"
+    ],
+    "steps": [
+      {
+        "action": "navigate_to_url",
+        "params": {
+          "url": "https://chat.openai.com"
+        }
+      },
+      {
+        "action": "type_in_app",
+        "params": {
+          "text": "Cuéntame un chiste"
+        }
+      },
+      {
+        "action": "press_key",
+        "params": {
+          "key": "enter"
+        }
+      }
+    ],
+    "site": "ChatGPT",
+    "times_used": 0,
+    "created_at": "2026-02-20 10:11"
+  },
+  {
+    "description": "completar el primer nivel del juego Geometry Dash",
+    "keywords": [
+      "Geometry Dash",
+      "juego",
+      "nivel"
+    ],
+    "steps": [
+      {
+        "action": "click_on_text",
+        "params": {
+          "text": "play grande"
+        }
+      },
+      {
+        "action": "click_on_text",
+        "params": {
+          "text": "primer nivel"
+        }
+      }
+    ],
+    "site": "Geometry Dash",
+    "times_used": 1,
+    "created_at": "2026-02-20 10:16"
+  },
+  {
+    "description": "Comenzar a jugar Geometry Dash",
+    "keywords": [
+      "Geometry Dash",
+      "jugar",
+      "nivel"
+    ],
+    "steps": [
+      {
+        "action": "switch_tab",
+        "params": {
+          "text": "Geometry Dash"
+        }
+      },
+      {
+        "action": "press_key",
+        "params": {
+          "key": "tab"
+        }
+      },
+      {
+        "action": "click_on_text",
+        "params": {
+          "text": "centro de la pantalla"
+        }
+      },
+      {
+        "action": "press_key",
+        "params": {
+          "key": "enter"
+        }
+      },
+      {
+        "action": "click_on_text",
+        "params": {
+          "text": "triángulos"
+        }
+      }
+    ],
+    "site": "Geometry Dash",
+    "times_used": 1,
+    "created_at": "2026-02-20 10:18"
   }
 ]

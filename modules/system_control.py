@@ -15,6 +15,17 @@ import tempfile
 
 logger = logging.getLogger("jarvis.system_control")
 
+# ─── Helper: ocultar ventana de consola en subprocess ─────
+# Cuando JARVIS se lanza con .pyw (sin consola), cada subprocess.run
+# que invoca powershell/cmd abre una ventana visible. Esto lo evita.
+_STARTUPINFO = None
+_CREATION_FLAGS = 0
+if os.name == 'nt':
+    _STARTUPINFO = subprocess.STARTUPINFO()
+    _STARTUPINFO.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    _STARTUPINFO.wShowWindow = 0  # SW_HIDE
+    _CREATION_FLAGS = subprocess.CREATE_NO_WINDOW
+
 
 class SystemControl:
     """Controla funciones del sistema operativo Windows."""
@@ -92,6 +103,7 @@ class SystemControl:
             ["powershell", "-NoProfile", "-EncodedCommand", encoded],
             check=True, timeout=5,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
         )
 
     # ─── Aplicaciones ─────────────────────────────────────────
@@ -192,6 +204,7 @@ class SystemControl:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             if result.returncode == 0:
                 return f"Aplicación cerrada: {app_name}"
@@ -342,6 +355,7 @@ class SystemControl:
             subprocess.run(
                 ["shutdown", "/s", "/t", str(delay)],
                 check=True,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             return f"Apagando en {delay} segundos..."
         except Exception as e:
@@ -353,6 +367,7 @@ class SystemControl:
             subprocess.run(
                 ["shutdown", "/r", "/t", str(delay)],
                 check=True,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             return f"Reiniciando en {delay} segundos..."
         except Exception as e:
@@ -364,6 +379,7 @@ class SystemControl:
             subprocess.run(
                 ["rundll32.exe", "powrprof.dll,SetSuspendState", "0", "1", "0"],
                 check=True,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             return "PC suspendido."
         except Exception as e:
@@ -380,7 +396,8 @@ class SystemControl:
     def logout(self) -> str:
         """Cierra la sesión del usuario."""
         try:
-            subprocess.run(["shutdown", "/l"], check=True)
+            subprocess.run(["shutdown", "/l"], check=True,
+                             startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS)
             return "Cerrando sesión..."
         except Exception as e:
             return f"Error al cerrar sesión: {e}"
@@ -846,7 +863,8 @@ class SystemControl:
             '''
             result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-                capture_output=True, text=True, timeout=10
+                capture_output=True, text=True, timeout=10,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             output = result.stdout.strip()
             if output and ',' in output:
@@ -990,7 +1008,8 @@ class SystemControl:
             result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command",
                  "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " + ps_script],
-                capture_output=True, timeout=20
+                capture_output=True, timeout=20,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
 
             output = (result.stdout.decode('utf-8', errors='replace') if result.stdout else '').strip()
@@ -1135,7 +1154,8 @@ class SystemControl:
             result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command",
                  "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " + ps_script],
-                capture_output=True, timeout=30
+                capture_output=True, timeout=30,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
 
             # Decodificar con utf-8 y fallback a errores reemplazados
@@ -1417,7 +1437,8 @@ class SystemControl:
             '''
             result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-                capture_output=True, text=True, timeout=10
+                capture_output=True, text=True, timeout=10,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             output = result.stdout.strip()
             stderr = result.stderr.strip()
@@ -1459,7 +1480,8 @@ class SystemControl:
             '''
             result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=5,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             return result.stdout.strip() or "Desconocido"
         except Exception:
@@ -1606,7 +1628,8 @@ class SystemControl:
         try:
             result = subprocess.run(
                 ["powershell", "-command", "Get-Clipboard"],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=5,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             content = result.stdout.strip()
             if content:
@@ -1623,6 +1646,7 @@ class SystemControl:
                 ["powershell", "-command", f"Set-Clipboard -Value '{escaped}'"],
                 check=True, timeout=5,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             return "Texto copiado al portapapeles."
         except Exception as e:
@@ -1649,6 +1673,7 @@ class SystemControl:
                     ["powershell", "-command", f"Set-Clipboard -Value '{escaped}'"],
                     check=True, timeout=5,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
                 )
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.1)
@@ -1916,7 +1941,8 @@ class SystemControl:
             '''
             result = subprocess.run(
                 ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-                capture_output=True, text=True, timeout=8
+                capture_output=True, text=True, timeout=8,
+                startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
             )
             output = result.stdout.strip()
             if output and output != "NOT_FOUND" and ',' in output:
@@ -2026,7 +2052,8 @@ class SystemControl:
                 '''
                 result = subprocess.run(
                     ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-                    capture_output=True, text=True, timeout=10
+                    capture_output=True, text=True, timeout=10,
+                    startupinfo=_STARTUPINFO, creationflags=_CREATION_FLAGS,
                 )
                 output = result.stdout.strip()
                 if output and ',' in output:
