@@ -13,8 +13,10 @@ Flujo mejorado (inspirado en OpenClaw):
 
 import json
 import logging
+import os
 import re
 import ctypes
+import subprocess
 import time
 from pathlib import Path
 from typing import Optional
@@ -316,15 +318,42 @@ class AutonomousAgent:
             "Hazme una lista por puntos de qué debería hacer para realizarla.\n"
             "Si hay algo que no sepas hacer al 100%, dime qué le tengo que "
             "preguntar a mi humano. Evita lo máximo posible hacer preguntas.\n\n"
-            "IMPORTANTE:\n"
-            "- Cada paso debe ser UNA acción mecánica concreta: hacer clic en algo, "
-            "escribir texto, pulsar una tecla, abrir una app, navegar a una URL, etc.\n"
-            "- Para hacer clic: usa el texto EXACTO que aparece en el OCR de arriba. "
-            "NO uses frases inventadas ni el texto del usuario.\n"
-            "- Si el elemento que busco ya está visible en el OCR, haz clic directamente. "
-            "NO abras otras aplicaciones.\n"
-            "- Si la información que pide el usuario ya está COMPLETA en el OCR, "
-            "pon already_found=true y responde directamente.\n\n"
+            "REGLAS CRÍTICAS:\n"
+            "1. PREFERIR SIEMPRE run_command (PowerShell) para:\n"
+            "   - Crear, mover, copiar, renombrar o borrar archivos/carpetas\n"
+            "   - Abrir Configuración/Ajustes de Windows (usa: Start-Process ms-settings:)\n"
+            "   - Obtener info del sistema (Get-Process, Get-Volume, etc.)\n"
+            "   - Guardar texto en archivos (Set-Content, Add-Content)\n"
+            "   - Hacer capturas de pantalla (se hace automáticamente con screenshot)\n"
+            "   - CUALQUIER tarea que se pueda resolver con un comando\n"
+            "2. SOLO usar la GUI (click, type, etc.) cuando sea IMPOSIBLE hacerlo con un comando:\n"
+            "   - Interactuar con una web específica\n"
+            "   - Hacer clic en un botón de una aplicación que no tiene API de comando\n"
+            "   - Rellenar un formulario\n"
+            "3. Para hacer clic: usa el texto EXACTO que aparece en el OCR de arriba.\n"
+            "4. NO abras aplicaciones que el usuario no ha pedido.\n"
+            "5. NO escribas nombres de archivo como texto dentro de aplicaciones.\n"
+            "6. Si la información está COMPLETA en el OCR, pon already_found=true.\n\n"
+            "EJEMPLOS DE PLANES CORRECTOS:\n"
+            "- 'Crea un archivo prueba.txt en el escritorio con hola':\n"
+            '  [{"step":1, "action":"run_command", "params":{"command":"Set-Content -Path \\"$env:USERPROFILE\\\\Desktop\\\\prueba.txt\\" -Value \\"hola\\""}, "description":"Crear archivo con PowerShell"}]\n'
+            "- 'Abre los ajustes de Windows':\n"
+            '  [{"step":1, "action":"run_command", "params":{"command":"Start-Process ms-settings:"}, "description":"Abrir Configuración de Windows"}]\n'
+            "- 'Haz una captura de pantalla':\n"
+            '  [{"step":1, "action":"screenshot", "params":{}, "description":"Captura de pantalla"}]\n'
+            "- 'Copia 12345 al portapapeles y pégalo en el Bloc de notas':\n"
+            '  [{"step":1, "action":"run_command", "params":{"command":"Set-Clipboard -Value \\"12345\\""}, "description":"Poner texto en portapapeles"},\n'
+            '   {"step":2, "action":"open_application", "params":{"app_name":"notepad"}, "description":"Abrir Bloc de notas"},\n'
+            '   {"step":3, "action":"paste_clipboard", "params":{}, "description":"Pegar contenido"}]\n'
+            "- 'Abre el Bloc de notas y escribe prueba':\n"
+            '  [{"step":1, "action":"open_application", "params":{"app_name":"notepad"}, "description":"Abrir Bloc de notas"},\n'
+            '   {"step":2, "action":"type_in_app", "params":{"text":"prueba"}, "description":"Escribir texto"}]\n\n'
+            "EJEMPLOS DE PLANES INCORRECTOS (NO hacer esto):\n"
+            "- Abrir el Explorador de archivos para crear un archivo (usar run_command)\n"
+            "- Escribir el nombre de un archivo dentro del Bloc de notas (usar run_command para crearlo)\n"
+            "- Buscar 'Configuración' en el menú Inicio (usar Start-Process ms-settings:)\n"
+            "- Escribir un texto en el chat de JARVIS (el chat es para el usuario, no para ti)\n"
+            "- Abrir una web de Microsoft para cambiar ajustes locales\n\n"
             "Responde SOLO con JSON válido (sin markdown, sin ```json):\n"
             "{\n"
             '  "understanding": "qué quiere el usuario",\n'
@@ -336,26 +365,24 @@ class AutonomousAgent:
             '"action": "ACCION", "params": {"param": "valor"} }\n'
             "  ]\n"
             "}\n\n"
-            "Acciones disponibles:\n"
-            "- open_application: {app_name: 'chrome'|'explorer'|...}\n"
+            "Acciones disponibles (en orden de preferencia):\n"
+            "- run_command: {command: 'comando PowerShell'} — ⭐ PREFERIDA para archivos, sistema, configuración\n"
+            "- screenshot: {} — captura y guarda la pantalla automáticamente en el Escritorio\n"
+            "- open_application: {app_name: 'chrome'|'notepad'|'explorer'|...}\n"
             "- navigate_to_url: {url: '...'}\n"
             "- click_on_text: {text: 'texto EXACTO del OCR'} — clic simple "
-            "(para botones, enlaces, menús, barras de herramientas)\n"
+            "(para botones, enlaces, menús)\n"
             "- double_click: {text: 'texto EXACTO del OCR'} — doble clic "
-            "(para ABRIR archivos, carpetas, iconos del escritorio, "
-            "elementos del Explorador de archivos). "
-            "En el escritorio y en el Explorador de Windows, "
-            "un solo clic SOLO selecciona; necesitas double_click para abrir.\n"
+            "(para ABRIR archivos/carpetas en el Explorador)\n"
             "- right_click: {text: 'texto'}\n"
             "- scroll_page: {direction: 'down'|'up'}\n"
-            "- type_in_app: {text: '...'}\n"
-            "- press_key: {key: 'enter'|'tab'|'ctrl+f'|'ctrl+c'|'ctrl+v'|...}\n"
+            "- type_in_app: {text: '...'} — escribir texto en la app ACTIVA (no en JARVIS)\n"
+            "- press_key: {key: 'enter'|'tab'|'ctrl+s'|'ctrl+c'|'ctrl+v'|...}\n"
             "- search_in_page: {text: '...'} — buscar con Ctrl+F\n"
-            "- focus_window: {app_name: '...'}\n"
-            "- read_screen: {} — leer la pantalla y decirle al usuario lo que hay\n"
-            "- run_command: {command: 'comando PowerShell'} — ejecutar comando del sistema\n"
-            "- copy_clipboard: {} — copiar selección al portapapeles\n"
-            "- paste_clipboard: {} — pegar del portapapeles\n"
+            "- focus_window: {app_name: '...'} — traer ventana al frente\n"
+            "- read_screen: {} — leer y reportar pantalla al usuario\n"
+            "- copy_clipboard: {} — copia la selección actual de la ventana activa\n"
+            "- paste_clipboard: {} — pega en la ventana activa\n"
             "- select_all: {} — seleccionar todo (Ctrl+A)\n"
             "- drag_and_drop: {from_text: 'origen', to_text: 'destino'}\n"
             "- wait: {seconds: N}\n"
@@ -364,14 +391,16 @@ class AutonomousAgent:
 
         messages = [
             {"role": "system", "content": (
-                "Eres un asistente local de IA que controla un escritorio Windows. "
+                "Eres un asistente de IA que controla un escritorio Windows. "
                 "Tu trabajo es recibir una petición y devolver una lista de pasos "
-                "mecánicos para realizarla: abrir apps, hacer clic, escribir, "
-                "pulsar teclas, etc. "
-                "Ves la pantalla del usuario por OCR. "
-                "Si un elemento está visible en el OCR, haz clic en él directamente. "
-                "NO abras aplicaciones que el usuario no ha pedido. "
-                "Responde SOLO con JSON válido. "
+                "para realizarla. "
+                "REGLA #1: Para CUALQUIER operación con archivos, carpetas o configuración "
+                "del sistema, USA run_command con PowerShell. NUNCA intentes hacerlo "
+                "a través de la GUI (explorador de archivos, menú inicio, etc.). "
+                "REGLA #2: Solo usa acciones GUI (click, type) para interactuar con "
+                "aplicaciones que el usuario ha pedido explícitamente o webs. "
+                "REGLA #3: NO abras aplicaciones que el usuario no ha pedido. "
+                "REGLA #4: Responde SOLO con JSON válido. "
                 "Si no sabes algo, ponlo en 'questions' en vez de inventar."
             )},
             {"role": "user", "content": prompt},
@@ -1124,26 +1153,56 @@ class AutonomousAgent:
 
         elif action == "screenshot":
             try:
-                self.sc.screenshot()
+                result = self.sc.screenshot()
+                logger.info(f"Screenshot: {result}")
                 return True
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error en screenshot: {e}")
                 return False
 
         elif action == "run_command":
-            # Ejecutar comando del sistema
+            # Ejecutar comando del sistema con PowerShell
             cmd = params.get("command", "")
             if cmd:
-                import subprocess
                 try:
-                    subprocess.run(
-                        ["powershell", "-Command", cmd],
-                        capture_output=True, text=True, timeout=15
+                    si = None
+                    cf = 0
+                    if os.name == 'nt':
+                        si = subprocess.STARTUPINFO()
+                        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                        si.wShowWindow = 0
+                        cf = subprocess.CREATE_NO_WINDOW
+                    result = subprocess.run(
+                        ["powershell", "-NoProfile", "-Command", cmd],
+                        capture_output=True, text=True, timeout=30,
+                        startupinfo=si, creationflags=cf,
                     )
-                    return True
+                    output = result.stdout.strip() or result.stderr.strip()
+                    if output:
+                        logger.info(f"Comando output: {output[:200]}")
+                    if result.returncode != 0 and result.stderr:
+                        logger.warning(f"Comando stderr: {result.stderr[:200]}")
+                    return result.returncode == 0 or not result.stderr
+                except subprocess.TimeoutExpired:
+                    logger.warning(f"Comando timeout: {cmd[:100]}")
+                    return False
                 except Exception as e:
                     logger.error(f"Error ejecutando comando: {e}")
                     return False
             return False
+
+        elif action == "save_file":
+            # Guardar archivo actual con Ctrl+S
+            self.sc.press_key("ctrl+s")
+            time.sleep(1)
+            filename = params.get("filename", "")
+            if filename:
+                # Si hay nombre, escribirlo en el diálogo de guardar
+                time.sleep(0.5)
+                self.sc.type_in_app(filename)
+                time.sleep(0.3)
+                self.sc.press_key("enter")
+            return True
 
         elif action == "drag_and_drop":
             from_text = params.get("from_text", "")
