@@ -160,21 +160,21 @@ class Orchestrator:
     def _register_all_tools(self):
         """Registra todos los módulos y sus métodos en el ToolRegistry."""
         module_categories = {
-            "file_manager": ToolCategory.FILE_SYSTEM,
-            "document_processor": ToolCategory.FILE_SYSTEM,
+            "file_manager": ToolCategory.FILE,
+            "document_processor": ToolCategory.DOCUMENT,
             "system_control": ToolCategory.SYSTEM,
             "web_search": ToolCategory.WEB,
             "email_manager": ToolCategory.COMMUNICATION,
             "code_executor": ToolCategory.CODE,
             "automation": ToolCategory.AUTOMATION,
-            "memory": ToolCategory.DATA,
+            "memory": ToolCategory.MEMORY,
             "vision": ToolCategory.VISION,
             "media_control": ToolCategory.MEDIA,
-            "notifications": ToolCategory.COMMUNICATION,
+            "notifications": ToolCategory.NOTIFICATION,
             "calendar": ToolCategory.CALENDAR,
         }
         for name, module in self.modules.items():
-            cat = module_categories.get(name, ToolCategory.OTHER)
+            cat = module_categories.get(name, ToolCategory.PLUGIN)
             try:
                 auto_register_module(module, name, cat)
             except Exception as e:
